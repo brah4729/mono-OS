@@ -25,16 +25,16 @@ static void print_prompt(void) {
 
 static void cmd_help(void) {
     vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
-    vga_puts("Dori Shell (dsh) — Available Commands:\n");
+    vga_puts("Dori Shell (dsh) - Available Commands:\n");
     vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
-    vga_puts("  help     — Show this help message\n");
-    vga_puts("  clear    — Clear the screen\n");
-    vga_puts("  meminfo  — Display memory information\n");
-    vga_puts("  ver      — Show kernel version\n");
-    vga_puts("  echo     — Echo text to screen\n");
-    vga_puts("  uptime   — Show system uptime\n");
-    vga_puts("  reboot   — Restart the system\n");
-    vga_puts("  halt     — Shut down the system\n");
+    vga_puts("  help     - Show this help message\n");
+    vga_puts("  clear    - Clear the screen\n");
+    vga_puts("  meminfo  - Display memory information\n");
+    vga_puts("  ver      - Show kernel version\n");
+    vga_puts("  echo     - Echo text to screen\n");
+    vga_puts("  uptime   - Show system uptime\n");
+    vga_puts("  reboot   - Restart the system\n");
+    vga_puts("  halt     - Shut down the system\n");
 }
 
 static void cmd_meminfo(void) {
@@ -63,7 +63,7 @@ static void cmd_meminfo(void) {
 
 static void cmd_ver(void) {
     vga_set_color(VGA_YELLOW, VGA_BLACK);
-    vga_puts("MonoOS v" MONOOS_VERSION " — ");
+    vga_puts("MonoOS v" MONOOS_VERSION " - ");
     vga_puts(KERNEL_NAME);
     vga_puts(" Kernel\n");
     vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);

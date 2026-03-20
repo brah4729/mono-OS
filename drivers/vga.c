@@ -11,7 +11,7 @@ static int vga_col = 0;
 static uint8_t vga_color_attr = 0;
 
 static inline uint16_t vga_entry(char c, uint8_t color) {
-    return (uint16_t)c | ((uint16_t)color << 8);
+    return (uint16_t)(uint8_t)c | ((uint16_t)color << 8);
 }
 
 static inline uint8_t vga_make_color(uint8_t fg, uint8_t bg) {

@@ -21,20 +21,20 @@
 static void print_banner(void) {
     vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
     vga_puts("\n");
-    vga_puts("  __   __                           ___     ____      \n");
-    vga_puts(" |  \\/  |   ___    _ __    ___   / _  \\  / ___|    \n");
-    vga_puts(" | |\\/| | / _ \\ | '_ \\ / _ \\ | |  \\ | \\ __    \n");
-    vga_puts(" | |   | || (_) | | | | | | (_)  | |__ |_|  ____\\  \n");
-    vga_puts(" |_|   |_| \\___/ |_| |_| \\___/ \\___ //  |____//    \n");
+    vga_puts("  __  __                            ___    ____  \n");
+    vga_puts(" |  \\/  |   ___    _ __     ___    / _ \\  / ___| \n");
+    vga_puts(" | |\\/| |  / _ \\  | '_ \\   / _ \\  | | | | \\___ \\ \n");
+    vga_puts(" | |  | | | (_) | | | | | | (_) | | |_| |  ___) |\n");
+    vga_puts(" |_|  |_|  \\___/  |_| |_|  \\___/   \\___/  |____/ \n");
     vga_puts("\n");
 
     vga_set_color(VGA_YELLOW, VGA_BLACK);
-    vga_puts("  MonoOS v" MONOOS_VERSION " — ");
+    vga_puts("  MonoOS v" MONOOS_VERSION " - ");
     vga_puts(KERNEL_NAME);
     vga_puts(" Kernel\n");
 
     vga_set_color(VGA_DARK_GREY, VGA_BLACK);
-    vga_puts("  ─────────────────────────────────────\n");
+    vga_puts("  -------------------------------------\n");
     vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
 }
 
@@ -135,7 +135,7 @@ void kernel_main(uint32_t magic, uint32_t mboot_info_addr) {
     serial_puts("[DORI] All systems initialized\n");
 
     vga_set_color(VGA_DARK_GREY, VGA_BLACK);
-    vga_puts("  ─────────────────────────────────────\n");
+    vga_puts("  -------------------------------------\n");
     vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
     vga_puts("  System ready. Type 'help' for commands.\n\n");
     vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);

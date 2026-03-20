@@ -1,0 +1,51 @@
+=== MonoOS Build Script ===
+Date: Thu Mar 19 20:01:14 WIB 2026
+
+--- Cleaning ---
+Clean OK
+
+--- Assembling boot files ---
+  multiboot.asm OK
+  gdt.asm OK
+  idt.asm OK
+
+--- Compiling C files ---
+  kernel/kernel.c OK
+  kernel/gdt.c OK
+  kernel/idt.c OK
+  kernel/pic.c OK
+  kernel/pit.c OK
+  kernel/pmm.c OK
+  kernel/vmm.c OK
+  kernel/heap.c OK
+  kernel/kshell.c OK
+  drivers/vga.c OK
+  drivers/keyboard.c OK
+  drivers/serial.c OK
+  lib/string.c OK
+
+--- Linking ---
+  Link OK
+
+--- ISO Generation ---
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+Drive current: -outdev 'stdio:monoos.iso'
+Media current: stdio file, overwriteable
+Media status : is blank
+Media summary: 0 sessions, 0 data blocks, 0 data, 97.9g free
+Added to ISO image: directory '/'='/tmp/grub.i3X93a'
+xorriso : UPDATE :     295 files added in 1 seconds
+Added to ISO image: directory '/'='/mnt/c/Users/Asus/Desktop/MonoOs/iso'
+xorriso : UPDATE :     299 files added in 1 seconds
+xorriso : NOTE : Copying to System Area: 512 bytes from file '/usr/lib/grub/i386-pc/boot_hybrid.img'
+ISO image produced: 2513 sectors
+Written to medium : 2513 sectors at LBA 0
+Writing to 'stdio:monoos.iso' completed successfully.
+
+  ISO OK
+
+-rwxrwxrwx 1 monos monos   24068 Mar 19 20:01 dori.kernel
+-rwxrwxrwx 1 monos monos 5146624 Mar 19 20:01 monoos.iso
+
+=== BUILD COMPLETE ===

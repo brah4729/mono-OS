@@ -4,6 +4,7 @@
 #include "../include/isr.h"
 #include "../include/io.h"
 #include "../include/serial.h"
+#include "../include/string.h"
 
 static volatile uint32_t tick_count = 0;
 static uint32_t pit_hz = 0;
