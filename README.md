@@ -1,6 +1,6 @@
 # 🖥️ MonoOS
 
-> **A from-scratch monolithic kernel (codename: Dori) — boots, has a shell, a real filesystem, system calls, and an ELF loader.**
+> **A from-scratch monolithic kernel (codename: Dori) — boots into a graphical desktop (Oki DE), has a shell, a real filesystem, system calls, and an ELF loader.**
 
 [![Status](https://img.shields.io/badge/status-active%20development-yellow?style=flat-square)](https://github.com/brah4729/Mono-Os)
 [![Boot](https://img.shields.io/badge/boots%20in%20QEMU-%E2%9C%93-brightgreen?style=flat-square)]()
@@ -32,9 +32,11 @@ MonoOS is **experimental pre-release software**. It is under active development 
 
 MonoOS is a hobby operating system built entirely from scratch in C and NASM Assembly, with no borrowed kernel code and no OS underneath it. It uses a **monolithic kernel architecture** — the same model as Linux — where the kernel, drivers, and core services share a single address space in Ring 0.
 
-Internally the kernel is called **Dori** (`dori.kernel`). The project targets **32-bit x86 (i686)** processors and boots via GRUB using the Multiboot specification.
+Internally the kernel is called **Dori** (`dori.kernel`). The project targets **32-bit x86 (i686)** processors and boots via GRUB using the **Multiboot2** specification.
 
-The project now includes a real on-disk filesystem (**DoriFS**), a working VFS layer, a system call interface with 19 calls, a process manager, an ELF binary loader, and is currently integrating **nixpkgs** as a reproducible build environment and package manager.
+When GRUB provides a VESA framebuffer (1024×768×32), the kernel starts **Oki**, a Hyprland-inspired desktop environment with windows, workspaces, a top panel, mouse support, and a built-in terminal. Without a framebuffer it falls back to the VGA text-mode kernel shell.
+
+The project includes a real on-disk filesystem (**DoriFS**), a working VFS layer, a system call interface with 19 calls, a process manager, an ELF binary loader, a userspace C library (`libc/`) with sample programs (`userland/`), and a `flake.nix` for a reproducible Nix build environment.
 
 ---
 
@@ -42,14 +44,17 @@ The project now includes a real on-disk filesystem (**DoriFS**), a working VFS l
 
 | Subsystem | Status | Notes |
 |-----------|--------|-------|
-| GRUB Multiboot boot | ✅ Working | Stable entry from GRUB → `boot/multiboot.asm` → `kernel_main()` |
+| GRUB Multiboot2 boot | ✅ Working | Stable entry from GRUB → `boot/multiboot.asm` → `kernel_main()` |
 | GDT | ✅ Working | 6 descriptors: null, kernel code/data (Ring 0), user code/data (Ring 3), TSS |
 | IDT + CPU exceptions | ✅ Working | All 256 vectors registered; exceptions handled and reported |
-| PIC (8259) | ✅ Working | Remapped; IRQ0 (timer) and IRQ1 (keyboard) active |
-| PIT (system timer) | ✅ Working | Programmable Interval Timer for time-keeping and future scheduling |
-| VGA text output | ✅ Working | Full 16-colour support; `vga_set_color()` for foreground and background |
+| PIC (8259) | ✅ Working | Remapped; IRQ0 (timer), IRQ1 (keyboard), IRQ12 (mouse) active |
+| PIT (system timer) | ✅ Working | 1000 Hz tick; used for uptime and Oki frame pacing |
+| VGA text output | ✅ Working | Full 16-colour support and scrolling; used during early boot and text-mode fallback |
 | Serial port | ✅ Working | `drivers/serial.c` — serial output available for debug logging |
-| PS/2 Keyboard | ✅ Working | IRQ1-driven; scan codes translated to ASCII |
+| PS/2 Keyboard | ✅ Working | IRQ1-driven; scan codes translated to ASCII; raw scancodes exposed for F1–F4 etc. |
+| PS/2 Mouse | ✅ Working | `drivers/mouse.c` — IRQ12, packet decoding, bounds, callback into Oki |
+| VESA framebuffer | ✅ Working | `drivers/framebuffer.c` — from Multiboot2 tag; back buffer, rects, rounded rects, circles, lines, alpha blend, 8×16 text, cursor |
+| Oki Desktop Environment | ✅ Working | `kernel/oki.c` — windows (move/focus/close), 4 workspaces, top panel/taskbar, built-in terminal, ~30 fps redraw |
 | Physical memory manager | ✅ Working | `kernel/pmm.c` — tracks free/used physical frames |
 | Virtual memory manager | ✅ Working | `kernel/vmm.c` — page table management |
 | Kernel heap | ✅ Working | `kernel/heap.c` — `kmalloc` and `kfree` both implemented |
@@ -59,7 +64,8 @@ The project now includes a real on-disk filesystem (**DoriFS**), a working VFS l
 | System calls | ✅ Working | 19 syscalls via `int 0x80`; see full list below |
 | Process manager | ✅ Working | `kernel/process.c` + `boot/context_switch.asm` — process structures and context switch |
 | ELF loader | ✅ Working | `kernel/elf.c` — loads ELF32 binaries for execution |
-| Kernel shell | ✅ Working | `kernel/kshell.c` — interactive command interface |
+| Kernel shell | ✅ Working | `kernel/kshell.c` — text-mode fallback shell |
+| Userspace libc + programs | 🟡 Builds | `libc/` (crt0, stdio, stdlib, string, unistd) and `userland/` (`init`, `hello`, `nix-env`, `nix-query`) |
 
 ---
 
@@ -68,9 +74,9 @@ The project now includes a real on-disk filesystem (**DoriFS**), a working VFS l
 | Feature | Notes |
 |---------|-------|
 | Full userspace (Ring 3 enforcement) | GDT has user segments and TSS is set up; process execution in Ring 3 is in progress |
-| Process scheduler | Process structures exist; round-robin or priority scheduling not yet running |
-| nixpkgs integration | In progress — will provide reproducible build env and package management |
-| VGA scrolling | Screen wraps when the 80×25 buffer fills |
+| Process scheduler | `process_schedule()` exists but is not called from the PIT IRQ — no preemption yet |
+| nixpkgs integration | `flake.nix` exists; in-OS `nix-env`/`nix-query` are early prototypes |
+| Running ELF programs from Oki | Oki terminal only runs built-in commands; `SYS_WRITE` to fd 1/2 goes to VGA text, not the Oki terminal |
 | Networking | Not started |
 | UEFI / ACPI | Not supported |
 | Multi-process `fork()` | Syscall defined (SYS_FORK = 9); implementation pending |
@@ -102,13 +108,16 @@ MonoOs/
 │   ├── dorifs.c            # DoriFS on-disk filesystem driver
 │   ├── syscall.c           # System call dispatcher (int 0x80)
 │   ├── process.c           # Process manager — PCBs, process creation
-│   └── elf.c               # ELF32 binary loader
+│   ├── elf.c               # ELF32 binary loader
+│   └── oki.c               # Oki Desktop Environment — compositor, windows, panel, terminal
 │
 ├── drivers/
 │   ├── vga.c               # VGA text mode — 80×25, 16 colours, cursor control
 │   ├── keyboard.c          # PS/2 keyboard — IRQ1, scan code translation
 │   ├── serial.c            # Serial port (COM1) — debug output
-│   └── ata.c               # ATA/IDE disk driver — PIO mode read/write
+│   ├── ata.c               # ATA/IDE disk driver — PIO mode read/write
+│   ├── framebuffer.c       # VESA linear framebuffer — drawing primitives, font, back buffer
+│   └── mouse.c             # PS/2 mouse — IRQ12 packet decoding
 │
 ├── include/
 │   ├── types.h             # Fundamental types (uint8_t, uint32_t, bool, size_t, etc.)
@@ -125,12 +134,17 @@ MonoOs/
 │   └── string.c            # memset, memcpy, memmove, strlen, strcmp, strncmp,
 │                           # strcpy, strncpy, itoa, utoa
 │
+├── libc/                   # Userspace C library (crt0.S, stdio, stdlib, string, unistd, user.ld)
+├── userland/               # User programs: init, hello, nix-env, nix-query
+│
 ├── iso/
 │   └── boot/
 │       └── grub/
 │           └── grub.cfg    # GRUB bootloader config
 │
 ├── linker.ld               # Kernel linker script — memory layout at 1 MiB
+├── flake.nix               # Nix dev shell with i686-elf toolchain, nasm, grub, qemu
+├── AGENTS.md               # Notes for AI coding agents working on this repo
 └── Makefile                # Build system — see Build section
 ```
 
@@ -141,31 +155,38 @@ MonoOs/
 ### Boot Sequence
 
 ```
-GRUB (Multiboot)
+GRUB (Multiboot2, gfxmode 1024x768x32)
     │
     └─► boot/multiboot.asm (_start)
-            • Validates Multiboot magic
             • Sets up initial stack
-            • Calls kernel_main(multiboot_info*)
+            • Calls kernel_main(magic, mb2_info_addr)
                 │
                 └─► kernel/kernel.c (kernel_main)
+                        • serial_init(), vga_init(), banner
+                        • verify Multiboot2 magic, parse tags
                         • gdt_init()
-                        • idt_init()
-                        • pic_init()
-                        • pit_init()
-                        • pmm_init()
-                        • vmm_init()
-                        • heap_init()
-                        • vga_init()
-                        • keyboard_init()
-                        • serial_init()
+                        • pic_init(), idt_init()
+                        • pit_init(1000)
+                        • pmm_init() / vmm_init() / heap_init()
+                        • keyboard_init(), mouse_init() (IRQ12)
                         • ata_init()
-                        • vfs_init()
-                        • dorifs_mount()
-                        • syscall_init()
-                        • process_init()
-                        • kshell_run()   ← waits for input here
+                        • vfs_init(), dorifs_mount() (auto-format if needed), create /nix/*
+                        • syscall_init(), process_init(), sti
+                        • fb_init_from_multiboot()
+                        • framebuffer? ─ yes ─► oki_init(); oki_run()   ← desktop event loop
+                        │               no
+                        └─► kshell_init(); kshell_run()                ← text-mode fallback
 ```
+
+### Oki Desktop Environment (`kernel/oki.c` + `include/oki.h`)
+
+Oki is a small compositing desktop drawn directly into the VESA framebuffer back buffer.
+
+- **Panel:** 32 px top bar (`OKI_PANEL_HEIGHT`) with pill-style modules (workspaces, info).
+- **Windows:** created with `oki_create_window(title, x, y, w, h, flags)`; flags `OKI_WIN_DECORATED`, `OKI_WIN_MOVABLE`, `OKI_WIN_RESIZABLE`. Drag by titlebar, click `[x]` to close. Each window owns a pixel buffer drawn with the `oki_window_*` helpers.
+- **Workspaces:** F1–F4 switch via `oki_switch_workspace()`.
+- **Event loop (`oki_run`):** polls keyboard scancodes and chars without blocking; mouse events arrive via `mouse_set_callback(oki_handle_mouse)`; redraws at most every 33 ms when `needs_redraw` is set, then `hlt`.
+- **Terminal:** built-in 58×18 terminal window. Commands: `help`, `ver`, `meminfo`, `uptime`, `ls`, `dori`, `clear`. It does not yet launch ELF programs.
 
 ### GDT — Global Descriptor Table (`kernel/gdt.c`)
 
@@ -442,17 +463,16 @@ void   utoa    (uint32_t value, char* buf, int base);        /* unsigned, any ba
 
 > ⚠️ **The cross-compiler must be `i686-elf-gcc`, not `x86_64-elf-gcc` and not your system GCC.** MonoOS compiles to 32-bit ELF. Using the wrong compiler will produce a binary that does not boot. Building the cross-compiler takes about 30 minutes but only needs to be done once.
 
-### nixpkgs (Coming Soon)
+### Nix (optional)
 
-nixpkgs integration is currently in development. When complete, it will let you enter a fully reproducible build shell with all tools pre-configured — no manual cross-compiler build required:
+`flake.nix` provides a dev shell with the i686-elf cross toolchain, nasm, grub, xorriso, and qemu:
 
 ```bash
-# Future workflow (not yet available):
 nix develop
 make
 ```
 
-Watch the repository for a `flake.nix` / `shell.nix` commit.
+Note: the Makefile defaults to `CROSS_PREFIX = $(HOME)/opt/cross/bin/i686-elf-`. Override it if your toolchain lives elsewhere, e.g. `make CROSS_PREFIX=i686-elf-`.
 
 ---
 
@@ -471,7 +491,7 @@ cd Mono-Os
 make
 ```
 
-Produces `monoos.iso` — a bootable ISO with GRUB and `dori.kernel` embedded.
+Builds `libc`, `userland`, the kernel, and `monoos.iso` — a bootable ISO with GRUB and `dori.kernel` embedded. Use `make kernel` to build only the kernel + ISO.
 
 ### 3. Create the disk image (required for ATA / DoriFS)
 
@@ -510,11 +530,21 @@ make run
 
 Equivalent to:
 ```bash
-qemu-system-i386 -cdrom monoos.iso -serial stdio -m 128M \
-    -drive file=monoos-disk.img,format=raw,if=ide
+qemu-system-i386 -m 256M -vga std -serial stdio -display gtk \
+    -cdrom monoos.iso -drive file=monoos-disk.img,format=raw,if=ide
 ```
 
 The disk image must exist (`make disk`) before running this.
+
+> `-vga std` is required. Without it GRUB cannot set a VESA mode, no framebuffer tag is passed, and Oki does not start.
+
+### Kernel-only fast build + run (for Oki / driver work)
+
+```bash
+make run-kernel
+```
+
+Skips libc/userland and runs without the disk image.
 
 ### Run without disk (CD-ROM only, no filesystem)
 
@@ -564,8 +594,8 @@ qemu-system-i386 \
 
 GRUB briefly shows its menu, then hands off. You should see:
 - Kernel banner / version string in VGA text output
-- Each subsystem init printed to screen (GDT, IDT, PMM, heap, ATA, VFS, DoriFS...)
-- The `kshell` prompt waiting for input
+- Each subsystem init printed to screen (GDT, IDT, PMM, heap, mouse, ATA, VFS, DoriFS...)
+- The Oki desktop with a Terminal and a System Info window (or the `kshell` prompt in text-mode fallback)
 
 ---
 
@@ -579,7 +609,7 @@ GRUB briefly shows its menu, then hands off. You should see:
 
 - **No process scheduler running yet.** The process manager and context switch are implemented, but nothing currently calls the scheduler in a timer interrupt. `SYS_EXEC` can load and jump to a binary but multi-process preemption is not active.
 - **`SYS_FORK` is not implemented.** The syscall number is defined and the handler is registered, but the implementation is pending.
-- **VGA driver does not scroll.** When the 80×25 buffer fills, output wraps from the top. The shell becomes unreadable after enough output. This is the most immediately painful known issue for interactive use.
+- **Oki terminal is isolated from userspace.** It only runs built-in commands and duplicates `kshell` logic. `SYS_WRITE` on fd 1/2 prints to VGA text memory, which is invisible while Oki is running.
 
 ### 🟡 Medium
 
@@ -590,7 +620,7 @@ GRUB briefly shows its menu, then hands off. You should see:
 
 ### 🟢 Low / Cosmetic
 
-- No version string or ASCII banner on startup.
+- Built artifacts (`*.o`, `dori.kernel`, `monoos.iso`, `monoos-disk.img`, `libc.a`) are committed to the repo.
 - GRUB `timeout` may need adjustment in `iso/boot/grub/grub.cfg` to auto-boot.
 
 ---
@@ -616,6 +646,11 @@ GRUB briefly shows its menu, then hands off. You should see:
 - [x] Process manager + context switch
 - [x] ELF32 binary loader
 - [x] Interactive kernel shell
+- [x] VGA scrolling
+- [x] PS/2 mouse driver
+- [x] VESA framebuffer graphics
+- [x] Oki Desktop Environment (windows, workspaces, panel, terminal)
+- [x] Userspace C library (libc)
 
 ### 🔄 In Progress
 - [ ] nixpkgs integration — reproducible build environment + package manager
@@ -624,11 +659,10 @@ GRUB briefly shows its menu, then hands off. You should see:
 - [ ] `SYS_FORK` implementation
 
 ### 🔮 Upcoming
-- [ ] VGA scrolling
+- [ ] Run ELF programs from the Oki terminal; route stdout to it
 - [ ] ATA DMA mode (replaces PIO — much faster disk I/O)
 - [ ] `SYS_WAITPID` full implementation
 - [ ] Larger filesystem support (multi-indirect blocks)
-- [ ] Userspace C library (libc stub)
 - [ ] Networking (NIC driver + TCP/IP stack)
 - [ ] ACPI power management (shutdown/reboot from software)
 
