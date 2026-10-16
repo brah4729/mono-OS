@@ -50,9 +50,14 @@ QEMU_BASE = qemu-system-i386 \
 
 QEMU_DISK = -drive file=$(DISKIMG),format=raw,if=ide
 
+QEMU_BIN     = qemu-system-i386
+BOOT_TIMEOUT = 20
+# Serial-log strings that must appear for `make test-boot` to pass.
+BOOT_MARKERS = "[DORI] Multiboot2 verified" "[DORI] All systems initialized" "[OKI] Entering desktop event loop"
+
 # ─── Targets ───────────────────────────────────────────────
 
-.PHONY: all kernel clean run run-nodisk run-kernel debug iso disk libc userland
+.PHONY: all kernel clean run run-nodisk run-kernel debug iso disk libc userland test-boot
 
 # Full build (kernel + libc + userland)
 all: libc userland $(ISO)
@@ -116,6 +121,10 @@ run-kernel: kernel
 # GDB debug session (attach with: gdb dori.kernel → target remote :1234)
 debug: $(ISO)
 	$(QEMU_BASE) -cdrom $(ISO) $(QEMU_DISK) -s -S
+
+# Headless boot test — asserts BOOT_MARKERS appear on serial
+test-boot: $(ISO)
+	scripts/boot-test.sh $(QEMU_BIN) $(ISO) $(BOOT_TIMEOUT) $(BOOT_MARKERS)
 
 # ─── Cleanup ───────────────────────────────────────────────
 clean:
