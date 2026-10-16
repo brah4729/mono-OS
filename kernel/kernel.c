@@ -242,6 +242,7 @@ void kernel_main(uint32_t magic, uint64_t mboot_info_addr) {
             vfs_mkdir("/nix/var/nix");
             vfs_mkdir("/nix/var/nix/profiles");
             vga_puts("  [OK] /nix/store ready\n");
+            selftest_dorifs();
         }
     }
 

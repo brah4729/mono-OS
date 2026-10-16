@@ -15,6 +15,7 @@
 #include "../include/syscall.h"
 #include "../include/elf.h"
 #include "../include/dorifs.h"
+#include "../include/vfs.h"
 
 _Static_assert(sizeof(registers_t) == 22 * 8, "registers_t must match boot/idt.asm push order");
 _Static_assert(sizeof(struct idt_entry) == 16, "x86_64 IDT gate is 16 bytes");
@@ -207,4 +208,55 @@ void selftest_elf(void) {
     bool rejshort = elf_validate(&h, 10) == -1;
 
     selftest_report("elf64-validate", good && rej32 && rej386 && rejshort);
+}
+
+/* ─── DoriFS: directory entries that straddle a 4 KiB block ─ */
+
+#define DIRENT_TEST_DIR    "/.selftest"
+#define DIRENT_TEST_COUNT  20   /* 262-byte entries: #16 crosses the first block end */
+
+static void dirent_test_path(char* out, size_t size, int i) {
+    char num[24];
+    utoa((uint64_t)i, num, 10);
+    strlcpy(out, DIRENT_TEST_DIR "/e", size);
+    strlcat(out, num, size);
+}
+
+/* Leftovers from an earlier boot that died mid-test are removed first */
+static void dirent_test_cleanup(void) {
+    char path[64];
+    for (int i = 0; i < DIRENT_TEST_COUNT; i++) {
+        dirent_test_path(path, sizeof(path), i);
+        while (vfs_unlink(path) == 0) {}
+    }
+    while (vfs_unlink(DIRENT_TEST_DIR) == 0) {}
+}
+
+void selftest_dorifs(void) {
+    char path[64];
+    dirent_test_cleanup();
+
+    bool ok = vfs_mkdir(DIRENT_TEST_DIR) == 0;
+    for (int i = 0; ok && i < DIRENT_TEST_COUNT; i++) {
+        dirent_test_path(path, sizeof(path), i);
+        ok = vfs_create(path, VFS_FILE) == 0;
+    }
+
+    /* readdir must return every entry with its exact name, in order */
+    vfs_dirent_t de;
+    int seen = 0;
+    while (ok && vfs_readdir(DIRENT_TEST_DIR, (uint32_t)seen, &de) == 0) {
+        dirent_test_path(path, sizeof(path), seen);
+        if (strcmp(de.name, path + sizeof(DIRENT_TEST_DIR)) != 0) ok = false;
+        seen++;
+    }
+    ok = ok && seen == DIRENT_TEST_COUNT;
+
+    /* finddir (through stat) must locate an entry past the block boundary */
+    vfs_stat_t st;
+    dirent_test_path(path, sizeof(path), 17);
+    ok = ok && vfs_stat(path, &st) == 0;
+
+    dirent_test_cleanup();
+    selftest_report("dorifs-dirents", ok);
 }

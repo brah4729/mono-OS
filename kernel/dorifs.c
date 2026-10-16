@@ -177,6 +177,72 @@ static int dorifs_set_block(dorifs_inode_t* inode, uint32_t file_block, uint32_t
     return 0;
 }
 
+/* ─── Directory entry I/O ──────────────────────────────── */
+
+/*
+ * Directory data is a packed array of 262-byte dorifs_dirent_t records, so
+ * every 16th record crosses a 4 KiB block boundary. Records are copied piece
+ * by piece through a block buffer; nothing ever indexes past its end.
+ */
+static int dorifs_dirent_read(dorifs_inode_t* dir, uint32_t offset, dorifs_dirent_t* out) {
+    uint8_t* dst = (uint8_t*)out;
+    uint32_t done = 0;
+    uint8_t block_buf[DORIFS_BLOCK_SIZE];
+
+    while (done < sizeof(*out)) {
+        uint32_t pos = offset + done;
+        uint32_t in_block = pos % DORIFS_BLOCK_SIZE;
+        uint32_t n = DORIFS_BLOCK_SIZE - in_block;
+        if (n > sizeof(*out) - done) n = sizeof(*out) - done;
+
+        uint32_t disk_block = dorifs_get_block(dir, pos / DORIFS_BLOCK_SIZE);
+        if (disk_block == 0) {
+            /* Older kernels dropped the tail of a straddling record; read it as zeros */
+            memset(dst + done, 0, n);
+        } else {
+            if (dorifs_read_block(disk_block, block_buf) != 0) return -1;
+            memcpy(dst + done, &block_buf[in_block], n);
+        }
+        done += n;
+    }
+    return 0;
+}
+
+/* Writes one record at offset, allocating directory blocks as needed. The
+ * caller writes *dir back, since block pointers and block_count may change. */
+static int dorifs_dirent_write(dorifs_inode_t* dir, uint32_t offset, const dorifs_dirent_t* de) {
+    const uint8_t* src = (const uint8_t*)de;
+    uint32_t done = 0;
+    uint8_t block_buf[DORIFS_BLOCK_SIZE];
+
+    while (done < sizeof(*de)) {
+        uint32_t pos = offset + done;
+        uint32_t file_block = pos / DORIFS_BLOCK_SIZE;
+        uint32_t in_block = pos % DORIFS_BLOCK_SIZE;
+        uint32_t n = DORIFS_BLOCK_SIZE - in_block;
+        if (n > sizeof(*de) - done) n = sizeof(*de) - done;
+
+        uint32_t disk_block = dorifs_get_block(dir, file_block);
+        if (disk_block == 0) {
+            disk_block = dorifs_alloc_block();
+            if (disk_block == 0) return -1;
+            if (dorifs_set_block(dir, file_block, disk_block) != 0) {
+                dorifs_free_block(disk_block);
+                return -1;
+            }
+            dir->block_count++;
+            memset(block_buf, 0, DORIFS_BLOCK_SIZE);
+        } else if (dorifs_read_block(disk_block, block_buf) != 0) {
+            return -1;
+        }
+
+        memcpy(&block_buf[in_block], src + done, n);
+        if (dorifs_write_block(disk_block, block_buf) != 0) return -1;
+        done += n;
+    }
+    return 0;
+}
+
 /* ─── VFS operations for DoriFS ─────────────────────────── */
 
 /* Forward declarations */
@@ -267,33 +333,21 @@ static int dorifs_vfs_readdir(vfs_node_t* node, uint32_t index, vfs_dirent_t* ou
     if (dorifs_read_inode(node->inode, &inode) != 0) return -1;
     if (inode.type != DORIFS_TYPE_DIR) return -1;
 
-    /* Read directory data (list of dorifs_dirent_t entries) */
     uint32_t entry_idx = 0;
-    uint32_t offset = 0;
-    uint8_t block_buf[DORIFS_BLOCK_SIZE];
+    dorifs_dirent_t de;
 
-    while (offset < inode.size) {
-        uint32_t file_block = offset / DORIFS_BLOCK_SIZE;
-        uint32_t block_offset = offset % DORIFS_BLOCK_SIZE;
-        uint32_t disk_block = dorifs_get_block(&inode, file_block);
+    for (uint32_t offset = 0; offset < inode.size; offset += sizeof(dorifs_dirent_t)) {
+        if (dorifs_dirent_read(&inode, offset, &de) != 0) return -1;
+        if (de.inode == 0) continue;
 
-        if (disk_block == 0) return -1;
-        if (dorifs_read_block(disk_block, block_buf) != 0) return -1;
-
-        dorifs_dirent_t* de = (dorifs_dirent_t*)&block_buf[block_offset];
-
-        if (de->inode != 0) {
-            if (entry_idx == index) {
-                out->inode = de->inode;
-                out->type = de->type;
-                memcpy(out->name, de->name, de->name_len);
-                out->name[de->name_len] = '\0';
-                return 0;
-            }
-            entry_idx++;
+        if (entry_idx == index) {
+            out->inode = de.inode;
+            out->type = de.type;
+            memcpy(out->name, de.name, de.name_len);
+            out->name[de.name_len] = '\0';
+            return 0;
         }
-
-        offset += sizeof(dorifs_dirent_t);
+        entry_idx++;
     }
 
     return -1; /* No more entries */
@@ -304,25 +358,13 @@ static vfs_node_t* dorifs_vfs_finddir(vfs_node_t* node, const char* name) {
     if (dorifs_read_inode(node->inode, &inode) != 0) return NULL;
     if (inode.type != DORIFS_TYPE_DIR) return NULL;
 
-    uint32_t offset = 0;
-    uint8_t block_buf[DORIFS_BLOCK_SIZE];
-
-    while (offset < inode.size) {
-        uint32_t file_block = offset / DORIFS_BLOCK_SIZE;
-        uint32_t block_offset = offset % DORIFS_BLOCK_SIZE;
-        uint32_t disk_block = dorifs_get_block(&inode, file_block);
-
-        if (disk_block == 0) return NULL;
-        if (dorifs_read_block(disk_block, block_buf) != 0) return NULL;
-
-        dorifs_dirent_t* de = (dorifs_dirent_t*)&block_buf[block_offset];
-
-        if (de->inode != 0 && strncmp(de->name, name, de->name_len) == 0
-            && name[de->name_len] == '\0') {
-            return dorifs_make_vfs_node(de->inode);
+    dorifs_dirent_t de;
+    for (uint32_t offset = 0; offset < inode.size; offset += sizeof(dorifs_dirent_t)) {
+        if (dorifs_dirent_read(&inode, offset, &de) != 0) return NULL;
+        if (de.inode != 0 && strncmp(de.name, name, de.name_len) == 0
+            && name[de.name_len] == '\0') {
+            return dorifs_make_vfs_node(de.inode);
         }
-
-        offset += sizeof(dorifs_dirent_t);
     }
 
     return NULL;
@@ -361,28 +403,10 @@ static int dorifs_vfs_create(vfs_node_t* parent, const char* name, uint32_t type
     strncpy(de.name, name, DORIFS_MAX_NAME);
 
     /* Append entry to parent directory data */
-    uint32_t write_offset = parent_inode.size;
-    uint32_t file_block = write_offset / DORIFS_BLOCK_SIZE;
-    uint32_t block_offset = write_offset % DORIFS_BLOCK_SIZE;
-
-    uint8_t block_buf[DORIFS_BLOCK_SIZE];
-    uint32_t disk_block = dorifs_get_block(&parent_inode, file_block);
-
-    if (disk_block == 0) {
-        disk_block = dorifs_alloc_block();
-        if (disk_block == 0) {
-            dorifs_free_inode(ino);
-            return -1;
-        }
-        dorifs_set_block(&parent_inode, file_block, disk_block);
-        parent_inode.block_count++;
-        memset(block_buf, 0, DORIFS_BLOCK_SIZE);
-    } else {
-        dorifs_read_block(disk_block, block_buf);
+    if (dorifs_dirent_write(&parent_inode, parent_inode.size, &de) != 0) {
+        dorifs_free_inode(ino);
+        return -1;
     }
-
-    memcpy(&block_buf[block_offset], &de, sizeof(de));
-    dorifs_write_block(disk_block, block_buf);
 
     parent_inode.size += sizeof(dorifs_dirent_t);
     dorifs_write_inode(parent->inode, &parent_inode);
@@ -395,24 +419,15 @@ static int dorifs_vfs_unlink(vfs_node_t* parent, const char* name) {
     dorifs_inode_t parent_inode;
     if (dorifs_read_inode(parent->inode, &parent_inode) != 0) return -1;
 
-    uint32_t offset = 0;
-    uint8_t block_buf[DORIFS_BLOCK_SIZE];
+    dorifs_dirent_t de;
+    for (uint32_t offset = 0; offset < parent_inode.size; offset += sizeof(dorifs_dirent_t)) {
+        if (dorifs_dirent_read(&parent_inode, offset, &de) != 0) return -1;
 
-    while (offset < parent_inode.size) {
-        uint32_t file_block = offset / DORIFS_BLOCK_SIZE;
-        uint32_t block_offset = offset % DORIFS_BLOCK_SIZE;
-        uint32_t disk_block = dorifs_get_block(&parent_inode, file_block);
-
-        if (disk_block == 0) return -1;
-        if (dorifs_read_block(disk_block, block_buf) != 0) return -1;
-
-        dorifs_dirent_t* de = (dorifs_dirent_t*)&block_buf[block_offset];
-
-        if (de->inode != 0 && strncmp(de->name, name, de->name_len) == 0
-            && name[de->name_len] == '\0') {
+        if (de.inode != 0 && strncmp(de.name, name, de.name_len) == 0
+            && name[de.name_len] == '\0') {
             /* Free the inode's data blocks */
             dorifs_inode_t target;
-            dorifs_read_inode(de->inode, &target);
+            dorifs_read_inode(de.inode, &target);
 
             for (uint32_t b = 0; b < DORIFS_DIRECT_BLOCKS; b++) {
                 if (target.direct[b]) dorifs_free_block(target.direct[b]);
@@ -426,16 +441,15 @@ static int dorifs_vfs_unlink(vfs_node_t* parent, const char* name) {
                 dorifs_free_block(target.indirect);
             }
 
-            dorifs_free_inode(de->inode);
+            dorifs_free_inode(de.inode);
 
             /* Mark directory entry as deleted */
-            de->inode = 0;
-            dorifs_write_block(disk_block, block_buf);
+            de.inode = 0;
+            if (dorifs_dirent_write(&parent_inode, offset, &de) != 0) return -1;
+            dorifs_write_inode(parent->inode, &parent_inode);
 
             return 0;
         }
-
-        offset += sizeof(dorifs_dirent_t);
     }
 
     return -1;
@@ -513,28 +527,10 @@ static int dorifs_vfs_symlink(vfs_node_t* parent, const char* name, const char* 
     de.name_len = (uint8_t)strlen(name);
     strncpy(de.name, name, DORIFS_MAX_NAME);
 
-    uint32_t write_offset = parent_inode.size;
-    uint32_t file_block = write_offset / DORIFS_BLOCK_SIZE;
-    uint32_t block_offset = write_offset % DORIFS_BLOCK_SIZE;
-
-    uint8_t block_buf[DORIFS_BLOCK_SIZE];
-    uint32_t disk_block = dorifs_get_block(&parent_inode, file_block);
-
-    if (disk_block == 0) {
-        disk_block = dorifs_alloc_block();
-        if (disk_block == 0) {
-            dorifs_free_inode(ino);
-            return -1;
-        }
-        dorifs_set_block(&parent_inode, file_block, disk_block);
-        parent_inode.block_count++;
-        memset(block_buf, 0, DORIFS_BLOCK_SIZE);
-    } else {
-        dorifs_read_block(disk_block, block_buf);
+    if (dorifs_dirent_write(&parent_inode, parent_inode.size, &de) != 0) {
+        dorifs_free_inode(ino);
+        return -1;
     }
-
-    memcpy(&block_buf[block_offset], &de, sizeof(de));
-    dorifs_write_block(disk_block, block_buf);
 
     parent_inode.size += sizeof(dorifs_dirent_t);
     dorifs_write_inode(parent->inode, &parent_inode);
