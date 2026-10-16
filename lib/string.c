@@ -77,6 +77,27 @@ char* strcat(char* dest, const char* src) {
     return dest;
 }
 
+/* Copy src into dest of total size `size`, always NUL-terminating when
+ * size > 0. Returns strlen(src); a result >= size means truncation. */
+size_t strlcpy(char* dest, const char* src, size_t size) {
+    size_t len = strlen(src);
+    if (size) {
+        size_t n = (len >= size) ? size - 1 : len;
+        memcpy(dest, src, n);
+        dest[n] = '\0';
+    }
+    return len;
+}
+
+/* Append src to dest of total size `size`, always NUL-terminating when
+ * dest already fits. Returns the length it tried to create. */
+size_t strlcat(char* dest, const char* src, size_t size) {
+    size_t dlen = 0;
+    while (dlen < size && dest[dlen]) dlen++;
+    if (dlen == size) return size + strlen(src);
+    return dlen + strlcpy(dest + dlen, src, size - dlen);
+}
+
 char* strchr(const char* str, int c) {
     while (*str) {
         if (*str == (char)c) return (char*)str;

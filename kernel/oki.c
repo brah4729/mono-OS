@@ -146,27 +146,27 @@ static void draw_panel(void) {
     uint32_t up_minutes = (total_secs % 3600) / 60;
     char up_buf[24];
     char num[12];
-    strcpy(up_buf, "UP ");
+    strlcpy(up_buf, "UP ", sizeof(up_buf));
     utoa(up_hours, num, 10);
-    strcat(up_buf, num);
-    strcat(up_buf, "h");
-    if (up_minutes < 10) strcat(up_buf, "0");
+    strlcat(up_buf, num, sizeof(up_buf));
+    strlcat(up_buf, "h", sizeof(up_buf));
+    if (up_minutes < 10) strlcat(up_buf, "0", sizeof(up_buf));
     utoa(up_minutes, num, 10);
-    strcat(up_buf, num);
-    strcat(up_buf, "m");
+    strlcat(up_buf, num, sizeof(up_buf));
+    strlcat(up_buf, "m", sizeof(up_buf));
     draw_pill_module(&cursor, py, up_buf, COLOR_PILL_BG, COLOR_PILL_TEXT);
 
     /* RAM — used/total in MiB, from the PMM bitmap allocator */
     uint32_t used_mib  = (pmm_get_used_block_count() * 4) / 1024;
     uint32_t total_mib = (pmm_get_block_count() * 4) / 1024;
     char ram_buf[24];
-    strcpy(ram_buf, "RAM ");
+    strlcpy(ram_buf, "RAM ", sizeof(ram_buf));
     utoa(used_mib, num, 10);
-    strcat(ram_buf, num);
-    strcat(ram_buf, "/");
+    strlcat(ram_buf, num, sizeof(ram_buf));
+    strlcat(ram_buf, "/", sizeof(ram_buf));
     utoa(total_mib, num, 10);
-    strcat(ram_buf, num);
-    strcat(ram_buf, "MB");
+    strlcat(ram_buf, num, sizeof(ram_buf));
+    strlcat(ram_buf, "MB", sizeof(ram_buf));
     draw_pill_module(&cursor, py, ram_buf, COLOR_PILL_BG, COLOR_PILL_TEXT);
 }
 
@@ -252,7 +252,7 @@ static void draw_window(oki_window_t* win) {
 
 static void term_scroll_up(void) {
     for (int i = 0; i < TERM_ROWS - 1; i++) {
-        strcpy(g_term.lines[i], g_term.lines[i + 1]);
+        strlcpy(g_term.lines[i], g_term.lines[i + 1], sizeof(g_term.lines[i]));
         g_term.colors[i] = g_term.colors[i + 1];
     }
     g_term.lines[TERM_ROWS - 1][0] = '\0';
@@ -278,12 +278,12 @@ static void term_clear(void) {
 }
 
 /* Build "prefix + decimal + suffix" into buf */
-static void term_fmt(char* buf, const char* prefix, uint32_t val, const char* suffix) {
+static void term_fmt(char* buf, size_t size, const char* prefix, uint32_t val, const char* suffix) {
     char num[16];
     utoa(val, num, 10);
-    strcpy(buf, prefix);
-    strcat(buf, num);
-    strcat(buf, suffix);
+    strlcpy(buf, prefix, size);
+    strlcat(buf, num, size);
+    strlcat(buf, suffix, size);
 }
 
 static void term_render(void) {
@@ -325,8 +325,8 @@ static void term_render(void) {
 static void term_execute(const char* cmd) {
     /* Echo command with prompt */
     char echo[TERM_COLS + 1];
-    strcpy(echo, "$ dori> ");
-    strcat(echo, cmd);
+    strlcpy(echo, "$ dori> ", sizeof(echo));
+    strlcat(echo, cmd, sizeof(echo));
     term_println(echo, COLOR_GREEN);
 
     /* Dispatch */
@@ -353,11 +353,11 @@ static void term_execute(const char* cmd) {
     } else if (strcmp(cmd, "meminfo") == 0) {
         char buf[TERM_COLS + 1];
         term_println("Memory Information:", COLOR_MAUVE);
-        term_fmt(buf, "  Total:  ", pmm_get_block_count() * 4, " KiB");
+        term_fmt(buf, sizeof(buf), "  Total:  ", pmm_get_block_count() * 4, " KiB");
         term_println(buf, COLOR_TEXT);
-        term_fmt(buf, "  Used:   ", pmm_get_used_block_count() * 4, " KiB");
+        term_fmt(buf, sizeof(buf), "  Used:   ", pmm_get_used_block_count() * 4, " KiB");
         term_println(buf, COLOR_YELLOW);
-        term_fmt(buf, "  Free:   ", pmm_get_free_block_count() * 4, " KiB");
+        term_fmt(buf, sizeof(buf), "  Free:   ", pmm_get_free_block_count() * 4, " KiB");
         term_println(buf, COLOR_GREEN);
 
     } else if (strcmp(cmd, "uptime") == 0) {
@@ -367,9 +367,9 @@ static void term_execute(const char* cmd) {
         uint32_t hrs   = mins / 60;
         char buf[TERM_COLS + 1];
         char tmp[8];
-        term_fmt(buf, "  Uptime: ", hrs, "h ");
-        utoa(mins % 60, tmp, 10); strcat(buf, tmp); strcat(buf, "m ");
-        utoa(secs % 60, tmp, 10); strcat(buf, tmp); strcat(buf, "s");
+        term_fmt(buf, sizeof(buf), "  Uptime: ", hrs, "h ");
+        utoa(mins % 60, tmp, 10); strlcat(buf, tmp, sizeof(buf)); strlcat(buf, "m ", sizeof(buf));
+        utoa(secs % 60, tmp, 10); strlcat(buf, tmp, sizeof(buf)); strlcat(buf, "s", sizeof(buf));
         term_println(buf, COLOR_TEXT);
 
     } else if (strcmp(cmd, "ls") == 0) {
@@ -379,11 +379,11 @@ static void term_execute(const char* cmd) {
         while (vfs_readdir("/", idx, &entry) == 0) {
             char line[TERM_COLS + 1];
             if (entry.type == 2) {
-                strcpy(line, "  [DIR] ");
+                strlcpy(line, "  [DIR] ", sizeof(line));
             } else {
-                strcpy(line, "        ");
+                strlcpy(line, "        ", sizeof(line));
             }
-            strcat(line, entry.name);
+            strlcat(line, entry.name, sizeof(line));
             term_println(line, entry.type == 2 ? COLOR_LAVENDER : COLOR_TEXT);
             idx++;
         }
@@ -396,16 +396,16 @@ static void term_execute(const char* cmd) {
         term_println("  Desktop: Oki v0.1", COLOR_TEXT);
         term_println("  Shell:   dsh 1.0", COLOR_TEXT);
         term_println("  Video:   VESA FB 1024x768x32", COLOR_TEXT);
-        term_fmt(buf, "  Memory: ", pmm_get_used_block_count() * 4, " / ");
+        term_fmt(buf, sizeof(buf), "  Memory: ", pmm_get_used_block_count() * 4, " / ");
         char tmp[16];
         utoa(pmm_get_block_count() * 4, tmp, 10);
-        strcat(buf, tmp); strcat(buf, " KiB");
+        strlcat(buf, tmp, sizeof(buf)); strlcat(buf, " KiB", sizeof(buf));
         term_println(buf, COLOR_SUBTEXT);
 
     } else {
         char buf[TERM_COLS + 1];
-        strcpy(buf, "Unknown command: ");
-        strcat(buf, cmd);
+        strlcpy(buf, "Unknown command: ", sizeof(buf));
+        strlcat(buf, cmd, sizeof(buf));
         term_println(buf, COLOR_RED);
         term_println("Type 'help' for commands.", COLOR_SUBTEXT);
     }
@@ -794,13 +794,13 @@ if (term) {
         strncpy(buf, "Screen:  ", 10);
         char num[16];
         utoa(fb.width, num, 10);
-        strcat(buf, num);
-        strcat(buf, "x");
+        strlcat(buf, num, sizeof(buf));
+        strlcat(buf, "x", sizeof(buf));
         utoa(fb.height, num, 10);
-        strcat(buf, num);
-        strcat(buf, "x");
+        strlcat(buf, num, sizeof(buf));
+        strlcat(buf, "x", sizeof(buf));
         utoa(fb.bpp, num, 10);
-        strcat(buf, num);
+        strlcat(buf, num, sizeof(buf));
         oki_window_puts(sysinfo, 8, 120, buf, COLOR_SUBTEXT);
 
         oki_window_puts(sysinfo, 8, 152, "Workspaces:", COLOR_LAVENDER);
