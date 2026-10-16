@@ -12,6 +12,9 @@
 #include "../include/vmm.h"
 #include "../include/heap.h"
 #include "../include/process.h"
+#include "../include/syscall.h"
+#include "../include/elf.h"
+#include "../include/dorifs.h"
 
 _Static_assert(sizeof(registers_t) == 22 * 8, "registers_t must match boot/idt.asm push order");
 _Static_assert(sizeof(struct idt_entry) == 16, "x86_64 IDT gate is 16 bytes");
@@ -161,4 +164,47 @@ void selftest_sched(void) {
     selftest_report("ctx-switch", co_ran == 1);
     selftest_report("ctx-stack-align", co_aligned == 1);
     kfree(stack);
+}
+
+_Static_assert(sizeof(dorifs_superblock_t) == 4096, "DoriFS superblock layout changed — disk images break");
+_Static_assert(sizeof(dorifs_inode_t) == 344,       "DoriFS inode layout changed — disk images break");
+
+/* ─── Syscall ABI: rax = nr, rdi/rsi/rdx args, rax = ret ── */
+
+static long raw_syscall1(long nr, long a1) {
+    long ret;
+    __asm__ volatile ("int $0x80" : "=a"(ret) : "a"(nr), "D"(a1) : "memory");
+    return ret;
+}
+
+void selftest_syscall(void) {
+    long pid = raw_syscall1(SYS_GETPID, 0);
+    long bad = raw_syscall1(999, 0);
+    selftest_report("syscall-getpid", pid == (long)process_get_pid());
+    selftest_report("syscall-invalid", bad == -1);
+}
+
+/* ─── ELF64 header validation ───────────────────────────── */
+
+void selftest_elf(void) {
+    elf64_ehdr_t h;
+    memset(&h, 0, sizeof(h));
+    h.e_ident[0] = 0x7F; h.e_ident[1] = 'E'; h.e_ident[2] = 'L'; h.e_ident[3] = 'F';
+    h.e_ident[4] = ELFCLASS64;
+    h.e_ident[5] = ELFDATA2LSB;
+    h.e_ident[6] = 1;
+    h.e_type = ET_EXEC;
+    h.e_machine = EM_X86_64;
+    h.e_version = 1;
+    h.e_phentsize = sizeof(elf64_phdr_t);
+    bool good = elf_validate(&h, sizeof(h)) == 0;
+
+    h.e_ident[4] = 1;                 /* ELFCLASS32 → must be rejected */
+    bool rej32 = elf_validate(&h, sizeof(h)) == -1;
+    h.e_ident[4] = ELFCLASS64;
+    h.e_machine = 3;                  /* EM_386 → must be rejected */
+    bool rej386 = elf_validate(&h, sizeof(h)) == -1;
+    bool rejshort = elf_validate(&h, 10) == -1;
+
+    selftest_report("elf64-validate", good && rej32 && rej386 && rejshort);
 }

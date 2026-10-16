@@ -19,6 +19,7 @@ LDFLAGS = -T linker.ld -nostdlib -z max-page-size=0x1000
 ASM_SOURCES = boot/multiboot.asm boot/gdt.asm boot/idt.asm boot/context_switch.asm
 C_SOURCES   = kernel/kernel.c kernel/selftest.c kernel/gdt.c kernel/idt.c kernel/pic.c kernel/pit.c \
               kernel/pmm.c kernel/vmm.c kernel/heap.c kernel/process.c \
+              kernel/vfs.c kernel/dorifs.c kernel/syscall.c kernel/elf.c \
               drivers/vga.c drivers/serial.c drivers/keyboard.c drivers/mouse.c \
               drivers/ata.c drivers/framebuffer.c lib/string.c
 
@@ -53,7 +54,8 @@ BOOT_MARKERS = "[DORI] Multiboot2 verified" "[DORI] long mode active" \
                "[TEST] utoa64 ok" "[TEST] gdt-selectors ok" "[TEST] idt-int3 ok" "[TEST] pit-ticks ok" \
                "[TEST] vmm-high-map ok" "[TEST] vmm-huge-split ok" "[TEST] heap-align ok" \
                "[DORI] PS/2 mouse initialized" "[FB] Framebuffer found" \
-               "[TEST] ctx-switch ok" "[TEST] ctx-stack-align ok" "[OK] Process manager"
+               "[TEST] ctx-switch ok" "[TEST] ctx-stack-align ok" "[OK] Process manager" \
+               "[TEST] syscall-getpid ok" "[TEST] syscall-invalid ok" "[TEST] elf64-validate ok" "[OK] DoriFS mounted"
 
 # ─── Targets ───────────────────────────────────────────────
 
@@ -123,8 +125,8 @@ debug: $(ISO)
 	$(QEMU_BASE) -cdrom $(ISO) $(QEMU_DISK) -s -S
 
 # Headless boot test — asserts BOOT_MARKERS appear on serial
-test-boot: $(ISO)
-	scripts/boot-test.sh $(QEMU_BIN) $(ISO) $(BOOT_TIMEOUT) $(BOOT_MARKERS)
+test-boot: $(ISO) $(DISKIMG)
+	DISK=$(DISKIMG) scripts/boot-test.sh $(QEMU_BIN) $(ISO) $(BOOT_TIMEOUT) $(BOOT_MARKERS)
 
 # No-long-mode path — i386 QEMU CPU lacks LM, kernel must say so instead of triple-faulting
 test-no64: $(ISO)

@@ -20,6 +20,9 @@
 #include "../include/ata.h"
 #include "../include/framebuffer.h"
 #include "../include/process.h"
+#include "../include/vfs.h"
+#include "../include/dorifs.h"
+#include "../include/syscall.h"
 
 #define MULTIBOOT2_MAGIC_CHECK 0x36D76289
 
@@ -211,6 +214,40 @@ void kernel_main(uint32_t magic, uint64_t mboot_info_addr) {
     process_init();
     serial_puts("  [OK] Process manager\n");
     selftest_sched();
+
+    /* Initialize VFS */
+    vfs_init();
+    vga_puts("  [OK] Virtual filesystem\n");
+
+    /* Mount DoriFS if disk is present */
+    if (ata_is_present()) {
+        vfs_node_t* root = dorifs_mount(0);
+        if (!root) {
+            vga_puts("  [..] Formatting disk as DoriFS...\n");
+            serial_puts("[DORI] Formatting disk as DoriFS\n");
+            ata_drive_t drive = ata_get_drive_info();
+            dorifs_format(0, drive.size_sectors);
+            root = dorifs_mount(0);
+        }
+        if (root) {
+            vfs_mount("/", root);
+            vga_puts("  [OK] DoriFS mounted at /\n");
+            serial_puts("[OK] DoriFS mounted\n");
+
+            vfs_mkdir("/nix");
+            vfs_mkdir("/nix/store");
+            vfs_mkdir("/nix/var");
+            vfs_mkdir("/nix/var/nix");
+            vfs_mkdir("/nix/var/nix/profiles");
+            vga_puts("  [OK] /nix/store ready\n");
+        }
+    }
+
+    /* Initialize system calls */
+    syscall_init();
+    vga_puts("  [OK] System calls (int 0x80)\n");
+    selftest_syscall();
+    selftest_elf();
 
     /* Subsystem init is re-added task by task during the x86_64 port. */
     for (;;) hlt();
