@@ -29,7 +29,7 @@ void pit_init(uint32_t frequency) {
     irq_register_handler(0, pit_callback);
 
     serial_puts("[PIT] Initialized at ");
-    char buf[16];
+    char buf[24];
     utoa(frequency, buf, 10);
     serial_puts(buf);
     serial_puts(" Hz\n");

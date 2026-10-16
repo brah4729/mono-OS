@@ -666,7 +666,7 @@ int dorifs_format(uint32_t partition_lba, uint32_t total_sectors) {
     ata_flush();
 
     serial_puts("[DoriFS] Format complete: ");
-    char num[16];
+    char num[24];
     utoa(data_blocks, num, 10);
     serial_puts(num);
     serial_puts(" data blocks, ");
@@ -753,7 +753,7 @@ void dorifs_unmount(void) {
 }
 
 void dorifs_print_info(void) {
-    char buf[16];
+    char buf[24];
     vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
     vga_puts("DoriFS Information:\n");
     vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);

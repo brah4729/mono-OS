@@ -17,11 +17,14 @@ LDFLAGS = -T linker.ld -nostdlib -z max-page-size=0x1000
 
 # Source files
 ASM_SOURCES = boot/multiboot.asm boot/gdt.asm boot/idt.asm boot/context_switch.asm
-C_SOURCES   = kernel/kernel.c kernel/selftest.c kernel/gdt.c kernel/idt.c kernel/pic.c kernel/pit.c \
-              kernel/pmm.c kernel/vmm.c kernel/heap.c kernel/process.c \
-              kernel/vfs.c kernel/dorifs.c kernel/syscall.c kernel/elf.c \
-              drivers/vga.c drivers/serial.c drivers/keyboard.c drivers/mouse.c \
-              drivers/ata.c drivers/framebuffer.c lib/string.c
+C_SOURCES   = kernel/kernel.c kernel/selftest.c kernel/gdt.c kernel/idt.c kernel/pic.c \
+              kernel/pit.c kernel/pmm.c kernel/vmm.c kernel/heap.c \
+              kernel/kshell.c kernel/vfs.c kernel/dorifs.c \
+              kernel/syscall.c kernel/process.c kernel/elf.c \
+              kernel/oki.c \
+              drivers/vga.c drivers/keyboard.c drivers/serial.c \
+              drivers/ata.c drivers/framebuffer.c drivers/mouse.c \
+              lib/string.c
 
 # Object files
 ASM_OBJECTS = $(ASM_SOURCES:.asm=.o)
@@ -55,7 +58,8 @@ BOOT_MARKERS = "[DORI] Multiboot2 verified" "[DORI] long mode active" \
                "[TEST] vmm-high-map ok" "[TEST] vmm-huge-split ok" "[TEST] heap-align ok" \
                "[DORI] PS/2 mouse initialized" "[FB] Framebuffer found" \
                "[TEST] ctx-switch ok" "[TEST] ctx-stack-align ok" "[OK] Process manager" \
-               "[TEST] syscall-getpid ok" "[TEST] syscall-invalid ok" "[TEST] elf64-validate ok" "[OK] DoriFS mounted"
+               "[TEST] syscall-getpid ok" "[TEST] syscall-invalid ok" "[TEST] elf64-validate ok" "[OK] DoriFS mounted" \
+               "[DORI] All systems initialized" "[OKI] Entering desktop event loop"
 
 # ─── Targets ───────────────────────────────────────────────
 

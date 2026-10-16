@@ -23,6 +23,8 @@
 #include "../include/vfs.h"
 #include "../include/dorifs.h"
 #include "../include/syscall.h"
+#include "../include/kshell.h"
+#include "../include/oki.h"
 
 #define MULTIBOOT2_MAGIC_CHECK 0x36D76289
 
@@ -249,6 +251,35 @@ void kernel_main(uint32_t magic, uint64_t mboot_info_addr) {
     selftest_syscall();
     selftest_elf();
 
-    /* Subsystem init is re-added task by task during the x86_64 port. */
-    for (;;) hlt();
+    serial_puts("[DORI] All systems initialized\n");
+
+    /* ─── Start Oki DE on the framebuffer ─── */
+    if (fb_is_available()) {
+        vga_puts("  [OK] Framebuffer ready\n");
+        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+        vga_puts("\n  Starting Oki Desktop Environment...\n");
+
+        /* Short pause so the boot log stays readable */
+        uint32_t t0 = pit_get_ticks();
+        while (pit_get_ticks() - t0 < 500) hlt();
+
+        /* Set mouse callback for Oki */
+        mouse_set_callback(oki_handle_mouse);
+
+        /* Initialize and run Oki DE */
+        oki_init();
+        oki_run();
+
+        /* If oki_run returns, fall back to shell */
+    }
+
+    /* Fallback: text-mode shell */
+    vga_set_color(VGA_DARK_GREY, VGA_BLACK);
+    vga_puts("  -------------------------------------\n");
+    vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+    vga_puts("  System ready. Type 'help' for commands.\n\n");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+
+    kshell_init();
+    kshell_run();
 }

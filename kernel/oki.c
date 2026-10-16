@@ -145,7 +145,7 @@ static void draw_panel(void) {
     uint32_t up_hours   = total_secs / 3600;
     uint32_t up_minutes = (total_secs % 3600) / 60;
     char up_buf[24];
-    char num[12];
+    char num[24];
     strlcpy(up_buf, "UP ", sizeof(up_buf));
     utoa(up_hours, num, 10);
     strlcat(up_buf, num, sizeof(up_buf));
@@ -279,7 +279,7 @@ static void term_clear(void) {
 
 /* Build "prefix + decimal + suffix" into buf */
 static void term_fmt(char* buf, size_t size, const char* prefix, uint32_t val, const char* suffix) {
-    char num[16];
+    char num[24];
     utoa(val, num, 10);
     strlcpy(buf, prefix, size);
     strlcat(buf, num, size);
@@ -346,8 +346,8 @@ static void term_execute(const char* cmd) {
         term_clear();
 
     } else if (strcmp(cmd, "ver") == 0) {
-        term_println("MonoOS v0.2.0 - Dori Kernel", COLOR_YELLOW);
-        term_println("Arch: i686 (x86 protected mode)", COLOR_SUBTEXT);
+        term_println("MonoOS v0.3.0 - Dori Kernel", COLOR_YELLOW);
+        term_println("Arch: x86_64 (long mode)", COLOR_SUBTEXT);
         term_println("Built with , suffering and caffeine.", COLOR_SUBTEXT);
 
     } else if (strcmp(cmd, "meminfo") == 0) {
@@ -366,7 +366,7 @@ static void term_execute(const char* cmd) {
         uint32_t mins  = secs / 60;
         uint32_t hrs   = mins / 60;
         char buf[TERM_COLS + 1];
-        char tmp[8];
+        char tmp[24];
         term_fmt(buf, sizeof(buf), "  Uptime: ", hrs, "h ");
         utoa(mins % 60, tmp, 10); strlcat(buf, tmp, sizeof(buf)); strlcat(buf, "m ", sizeof(buf));
         utoa(secs % 60, tmp, 10); strlcat(buf, tmp, sizeof(buf)); strlcat(buf, "s", sizeof(buf));
@@ -391,13 +391,13 @@ static void term_execute(const char* cmd) {
 
     } else if (strcmp(cmd, "dori") == 0) {
         char buf[TERM_COLS + 1];
-        term_println("MonoOS 0.2.0 (Dori)", COLOR_MAUVE);
-        term_println("  Kernel:  Dori v0.2 (i686)", COLOR_TEXT);
+        term_println("MonoOS 0.3.0 (Dori)", COLOR_MAUVE);
+        term_println("  Kernel:  Dori v0.3 (x86_64)", COLOR_TEXT);
         term_println("  Desktop: Oki v0.1", COLOR_TEXT);
         term_println("  Shell:   dsh 1.0", COLOR_TEXT);
         term_println("  Video:   VESA FB 1024x768x32", COLOR_TEXT);
         term_fmt(buf, sizeof(buf), "  Memory: ", pmm_get_used_block_count() * 4, " / ");
-        char tmp[16];
+        char tmp[24];
         utoa(pmm_get_block_count() * 4, tmp, 10);
         strlcat(buf, tmp, sizeof(buf)); strlcat(buf, " KiB", sizeof(buf));
         term_println(buf, COLOR_SUBTEXT);
@@ -782,17 +782,17 @@ if (term) {
 
     if (sysinfo) {
         oki_window_clear(sysinfo, COLOR_BG);
-        oki_window_puts(sysinfo, 8, 8,   "MonoOS 0.2.0 (Dori)", COLOR_MAUVE);
-        oki_window_puts(sysinfo, 8, 32,  "Kernel:  Dori v0.2", COLOR_TEXT);
+        oki_window_puts(sysinfo, 8, 8,   "MonoOS 0.3.0 (Dori)", COLOR_MAUVE);
+        oki_window_puts(sysinfo, 8, 32,  "Kernel:  Dori v0.3", COLOR_TEXT);
         oki_window_puts(sysinfo, 8, 48,  "Desktop: Oki v0.1", COLOR_TEXT);
         oki_window_puts(sysinfo, 8, 64,  "Shell:   dsh 1.0", COLOR_TEXT);
-        oki_window_puts(sysinfo, 8, 88,  "Arch:    i686 (x86)", COLOR_SUBTEXT);
+        oki_window_puts(sysinfo, 8, 88,  "Arch:    x86_64", COLOR_SUBTEXT);
         oki_window_puts(sysinfo, 8, 104, "Video:   VESA FB", COLOR_SUBTEXT);
 
         char buf[64];
         buf[0] = '\0';
         strncpy(buf, "Screen:  ", 10);
-        char num[16];
+        char num[24];
         utoa(fb.width, num, 10);
         strlcat(buf, num, sizeof(buf));
         strlcat(buf, "x", sizeof(buf));

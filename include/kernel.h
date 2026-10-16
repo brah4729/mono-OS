@@ -3,7 +3,7 @@
 
 #include "types.h"
 
-#define MONOOS_VERSION "0.1"
+#define MONOOS_VERSION "0.3.0"
 #define KERNEL_NAME    "Dori"
 
 /* Multiboot info structure (simplified) */

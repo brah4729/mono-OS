@@ -146,7 +146,7 @@ static void cmd_dori(void) {
     vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
     vga_puts("  ██║  ██║██║   ██║██╔══██╗██║    ");
     dori_field("  Kernel", VGA_LIGHT_CYAN,
-               KERNEL_NAME " " MONOOS_VERSION " (i686)",
+               KERNEL_NAME " " MONOOS_VERSION " (x86_64)",
                VGA_WHITE);
 
     /* Row 4 — logo line 5  +  Shell */
@@ -160,7 +160,7 @@ static void cmd_dori(void) {
     vga_set_color(VGA_CYAN, VGA_BLACK);
     vga_puts("  ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝   ");
     dori_field("  Arch  ", VGA_LIGHT_CYAN,
-               "i686 (x86 protected mode)",
+               "x86_64 (long mode)",
                VGA_WHITE);
 
     /* blank  +  Memory */
