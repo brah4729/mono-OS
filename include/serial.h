@@ -8,6 +8,6 @@
 void serial_init(void);
 void serial_putchar(char c);
 void serial_puts(const char* str);
-void serial_put_hex(uint32_t value);
+void serial_put_hex(uint64_t value);
 
 #endif

@@ -30,8 +30,10 @@ void serial_puts(const char* str) {
     }
 }
 
-void serial_put_hex(uint32_t value) {
-    char buf[16];
-    utoa(value, buf, 16);
-    serial_puts(buf);
+/* Prints all 16 nibbles, no "0x" prefix (callers add it themselves) */
+void serial_put_hex(uint64_t value) {
+    const char* hex = "0123456789ABCDEF";
+    for (int i = 60; i >= 0; i -= 4) {
+        serial_putchar(hex[(value >> i) & 0xF]);
+    }
 }

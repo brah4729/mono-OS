@@ -2,29 +2,19 @@
 # Cross-compiler toolchain: i686-elf-gcc
 
 # Toolchain
-CROSS_PREFIX = $(HOME)/opt/cross/bin/i686-elf-
+CROSS_PREFIX = $(HOME)/opt/cross/bin/x86_64-elf-
 CC      = $(CROSS_PREFIX)gcc
 AS      = nasm
 LD      = $(CROSS_PREFIX)ld
 
 # Flags
-CFLAGS  = -std=gnu99 -ffreestanding -O2 -Wall -Wextra -Werror \
-           -I include -nostdlib -nostdinc -fno-builtin -fno-stack-protector \
-           -nostartfiles -nodefaultlibs
-ASFLAGS = -f elf32
-LDFLAGS = -T linker.ld -nostdlib
+CFLAGS  = -std=gnu99 -ffreestanding -O2 -Wall -Wextra -Werror            -I include -nostdlib -nostdinc -fno-builtin -fno-stack-protector            -nostartfiles -nodefaultlibs            -m64 -mcmodel=small -mno-red-zone -mgeneral-regs-only -fno-pic -fno-pie
+ASFLAGS = -f elf64
+LDFLAGS = -T linker.ld -nostdlib -z max-page-size=0x1000
 
 # Source files
-ASM_SOURCES = boot/multiboot.asm boot/gdt.asm boot/idt.asm \
-              boot/context_switch.asm
-C_SOURCES   = kernel/kernel.c kernel/gdt.c kernel/idt.c kernel/pic.c \
-              kernel/pit.c kernel/pmm.c kernel/vmm.c kernel/heap.c \
-              kernel/kshell.c kernel/vfs.c kernel/dorifs.c \
-              kernel/syscall.c kernel/process.c kernel/elf.c \
-              kernel/oki.c \
-              drivers/vga.c drivers/keyboard.c drivers/serial.c \
-              drivers/ata.c drivers/framebuffer.c drivers/mouse.c \
-              lib/string.c
+ASM_SOURCES = boot/multiboot.asm
+C_SOURCES   = kernel/kernel.c drivers/vga.c drivers/serial.c lib/string.c
 
 # Object files
 ASM_OBJECTS = $(ASM_SOURCES:.asm=.o)
@@ -42,7 +32,7 @@ DISKIMG = monoos-disk.img
 #               framebuffer tag to the kernel. Without this,
 #               fb_is_available() returns false and Oki DE
 #               never starts.
-QEMU_BASE = qemu-system-i386 \
+QEMU_BASE = qemu-system-x86_64 \
               -m 256M \
               -vga std \
               -serial stdio \
@@ -50,17 +40,17 @@ QEMU_BASE = qemu-system-i386 \
 
 QEMU_DISK = -drive file=$(DISKIMG),format=raw,if=ide
 
-QEMU_BIN     = qemu-system-i386
+QEMU_BIN     = qemu-system-x86_64
 BOOT_TIMEOUT = 20
 # Serial-log strings that must appear for `make test-boot` to pass.
-BOOT_MARKERS = "[DORI] Multiboot2 verified" "[DORI] All systems initialized" "[OKI] Entering desktop event loop"
+BOOT_MARKERS = "[DORI] Multiboot2 verified" "[DORI] long mode active"
 
 # ─── Targets ───────────────────────────────────────────────
 
-.PHONY: all kernel clean run run-nodisk run-kernel debug iso disk libc userland test-boot
+.PHONY: all kernel clean run run-nodisk run-kernel debug iso disk libc userland test-boot test-no64
 
 # Full build (kernel + libc + userland)
-all: libc userland $(ISO)
+all: $(ISO)
 
 # ── Kernel-only fast build (skips libc/userland) ──────────
 # Use this while iterating on oki.c / framebuffer / drivers.
@@ -125,6 +115,10 @@ debug: $(ISO)
 # Headless boot test — asserts BOOT_MARKERS appear on serial
 test-boot: $(ISO)
 	scripts/boot-test.sh $(QEMU_BIN) $(ISO) $(BOOT_TIMEOUT) $(BOOT_MARKERS)
+
+# No-long-mode path — i386 QEMU CPU lacks LM, kernel must say so instead of triple-faulting
+test-no64: $(ISO)
+	scripts/boot-test.sh qemu-system-i386 $(ISO) 15 "[BOOT] no long mode"
 
 # ─── Cleanup ───────────────────────────────────────────────
 clean:

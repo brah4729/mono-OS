@@ -150,7 +150,7 @@ void itoa(int value, char* buf, int base) {
     }
 }
 
-void utoa(uint32_t value, char* buf, int base) {
+void utoa(uint64_t value, char* buf, int base) {
     char* p = buf;
     char* p1, *p2;
 

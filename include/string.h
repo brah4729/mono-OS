@@ -17,6 +17,6 @@ size_t strlcat(char* dest, const char* src, size_t size);
 char*  strchr(const char* str, int c);
 char*  strstr(const char* haystack, const char* needle);
 void   itoa(int value, char* buf, int base);
-void   utoa(uint32_t value, char* buf, int base);
+void   utoa(uint64_t value, char* buf, int base);
 
 #endif

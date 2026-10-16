@@ -11,10 +11,10 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
-        # Cross-compilation toolchain for i686-elf
-        crossToolchain = pkgs.pkgsCross.i686-embedded;
+        # Cross-compilation toolchain for x86_64-elf
+        crossToolchain = pkgs.pkgsCross.x86_64-embedded;
 
-        # i686-elf-gcc and binutils from nixpkgs
+        # x86_64-elf-gcc and binutils from nixpkgs
         crossCC = crossToolchain.buildPackages.gcc;
         crossBinutils = crossToolchain.buildPackages.binutils;
 
@@ -39,13 +39,13 @@
 
           # Override the cross-compiler prefix for our Makefile
           makeFlags = [
-            "CROSS_PREFIX=${crossCC}/bin/i686-elf-"
+            "CROSS_PREFIX=${crossCC}/bin/x86_64-elf-"
           ];
 
           buildPhase = ''
-            make libc CROSS_PREFIX=${crossCC}/bin/i686-elf-
-            make userland CROSS_PREFIX=${crossCC}/bin/i686-elf-
-            make ${pkgs.lib.optionalString true "CROSS_PREFIX=${crossCC}/bin/i686-elf-"} dori.kernel
+            make libc CROSS_PREFIX=${crossCC}/bin/x86_64-elf-
+            make userland CROSS_PREFIX=${crossCC}/bin/x86_64-elf-
+            make ${pkgs.lib.optionalString true "CROSS_PREFIX=${crossCC}/bin/x86_64-elf-"} dori.kernel
           '';
 
           installPhase = ''
@@ -72,7 +72,7 @@
           nativeBuildInputs = buildInputs ++ [ crossCC crossBinutils ];
 
           buildPhase = ''
-            make all CROSS_PREFIX=${crossCC}/bin/i686-elf-
+            make all CROSS_PREFIX=${crossCC}/bin/x86_64-elf-
           '';
 
           installPhase = ''
@@ -106,7 +106,7 @@
             echo "║  Dori kernel · Oki DE · aswinpkgs     ║"
             echo "╚═══════════════════════════════════════╝"
             echo ""
-            echo "Cross-compiler: ${crossCC}/bin/i686-elf-gcc"
+            echo "Cross-compiler: ${crossCC}/bin/x86_64-elf-gcc"
             echo "NASM:           $(nasm --version)"
             echo ""
             echo "Commands:"
@@ -114,7 +114,7 @@
             echo "  make run     - Boot in QEMU with disk"
             echo "  make clean   - Clean build artifacts"
             echo ""
-            export CROSS_PREFIX="${crossCC}/bin/i686-elf-"
+            export CROSS_PREFIX="${crossCC}/bin/x86_64-elf-"
           '';
         };
       }
