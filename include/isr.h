@@ -3,12 +3,12 @@
 
 #include "types.h"
 
-/* Registers pushed by the ISR/IRQ stubs */
+/* Registers pushed by boot/idt.asm (lowest address first) + CPU interrupt frame */
 typedef struct {
-    uint32_t ds;
-    uint32_t edi, esi, ebp, useless_esp, ebx, edx, ecx, eax;
-    uint32_t int_no, err_code;
-    uint32_t eip, cs, eflags, esp, ss;
+    uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
+    uint64_t rbp, rdi, rsi, rdx, rcx, rbx, rax;
+    uint64_t int_no, err_code;
+    uint64_t rip, cs, rflags, rsp, ss;     /* pushed by CPU (always, in long mode) */
 } registers_t;
 
 /* ISR handler function type */

@@ -6,6 +6,11 @@
 #include "../include/serial.h"
 #include "../include/io.h"
 #include "../include/string.h"
+#include "../include/gdt.h"
+#include "../include/idt.h"
+#include "../include/pic.h"
+#include "../include/pit.h"
+#include "../include/selftest.h"
 
 #define MULTIBOOT2_MAGIC_CHECK 0x36D76289
 
@@ -105,6 +110,15 @@ void kernel_main(uint32_t magic, uint64_t mboot_info_addr) {
     serial_puts("[DORI] long mode active\n");
 
     parse_multiboot2(mboot_info_addr);
+
+    gdt_init();
+    serial_puts("[DORI] GDT initialized\n");
+    pic_init();
+    idt_init();
+    serial_puts("[DORI] IDT + PIC initialized\n");
+    pit_init(1000);
+    sti();
+    selftest_cpu();
 
     /* Subsystem init is re-added task by task during the x86_64 port. */
     for (;;) hlt();

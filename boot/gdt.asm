@@ -1,29 +1,26 @@
-; boot/gdt.asm — GDT and TSS flush routines
+; boot/gdt.asm — GDT and TSS load routines (x86_64)
 
 section .text
+bits 64
 global gdt_flush
 global tss_flush
 
-; void gdt_flush(uint32_t gdt_ptr)
+; void gdt_flush(uint64_t gdt_ptr)
 gdt_flush:
-    mov eax, [esp + 4]     ; Get the pointer to the GDT
-    lgdt [eax]             ; Load the new GDT
-
-    ; Reload segment registers
-    mov ax, 0x10           ; 0x10 = kernel data segment (entry 2)
+    lgdt [rdi]
+    mov ax, 0x10
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
     mov ss, ax
-
-    ; Far jump to reload CS with kernel code segment (0x08 = entry 1)
-    jmp 0x08:.flush
-.flush:
-    ret
+    pop rax                 ; return address
+    push qword 0x08         ; new CS
+    push rax
+    retfq                   ; far return reloads CS
 
 ; void tss_flush(void)
 tss_flush:
-    mov ax, 0x2B           ; TSS segment selector (entry 5 | RPL 3)
+    mov ax, 0x28
     ltr ax
     ret

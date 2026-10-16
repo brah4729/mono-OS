@@ -3,25 +3,24 @@
 
 #include "types.h"
 
-/* IDT entry structure */
 struct idt_entry {
-    uint16_t base_low;
+    uint16_t offset_low;
     uint16_t sel;
-    uint8_t  always0;
-    uint8_t  flags;
-    uint16_t base_high;
+    uint8_t  ist;          /* bits 0-2: IST index, 0 = none */
+    uint8_t  flags;        /* 0x8E = present, DPL0, interrupt gate; 0xEE = DPL3 */
+    uint16_t offset_mid;
+    uint32_t offset_high;
+    uint32_t reserved;
 } __attribute__((packed));
 
-/* IDT pointer structure */
 struct idt_ptr {
     uint16_t limit;
-    uint32_t base;
+    uint64_t base;
 } __attribute__((packed));
 
 void idt_init(void);
-void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags);
+void idt_set_gate(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags);
 
-/* Defined in boot/idt.asm */
-extern void idt_flush(uint32_t idt_ptr);
+extern void idt_flush(uint64_t idt_ptr);
 
 #endif

@@ -1,66 +1,52 @@
-/* kernel/gdt.c — Global Descriptor Table setup for Dori kernel */
+/* kernel/gdt.c — x86_64 Global Descriptor Table + TSS for Dori kernel */
 
 #include "../include/gdt.h"
 #include "../include/string.h"
 
-#define GDT_ENTRIES 6
+#define GDT_ENTRIES 7   /* null, kcode, kdata, ucode, udata, tss(lo), tss(hi) */
 
-static struct gdt_entry gdt[GDT_ENTRIES];
+static uint64_t         gdt[GDT_ENTRIES];
 static struct gdt_ptr   gp;
 static struct tss_entry tss;
 
-static void gdt_set_gate(int num, uint32_t base, uint32_t limit,
-                          uint8_t access, uint8_t gran) {
-    gdt[num].base_low    = (base & 0xFFFF);
-    gdt[num].base_middle = (base >> 16) & 0xFF;
-    gdt[num].base_high   = (base >> 24) & 0xFF;
-
-    gdt[num].limit_low   = (limit & 0xFFFF);
-    gdt[num].granularity  = ((limit >> 16) & 0x0F) | (gran & 0xF0);
-
-    gdt[num].access      = access;
+/* Code/data descriptor: base and limit are ignored in long mode except for flags */
+static uint64_t make_segment(uint8_t access, uint8_t flags) {
+    return ((uint64_t)0xFFFF)                    /* limit 15:0  */
+         | ((uint64_t)access << 40)
+         | ((uint64_t)0xF << 48)                 /* limit 19:16 */
+         | ((uint64_t)(flags & 0xF0) << 48);     /* G, D/B, L   */
 }
 
-static void write_tss(int num, uint16_t ss0, uint32_t esp0) {
-    uint32_t base  = (uint32_t)&tss;
-    uint32_t limit = base + sizeof(tss);
+static void write_tss_descriptor(int num) {
+    uint64_t base  = (uint64_t)(uintptr_t)&tss;
+    uint64_t limit = sizeof(tss) - 1;
 
-    gdt_set_gate(num, base, limit, 0xE9, 0x00);
-
-    memset(&tss, 0, sizeof(tss));
-    tss.ss0  = ss0;
-    tss.esp0 = esp0;
-    tss.cs   = 0x08 | 0x3;  /* Kernel code segment with RPL 3 */
-    tss.ss = tss.ds = tss.es = tss.fs = tss.gs = 0x10 | 0x3;
-    tss.iomap_base = sizeof(tss);
+    gdt[num] = (limit & 0xFFFF)
+             | ((base & 0xFFFFFF) << 16)
+             | ((uint64_t)0x89 << 40)            /* present, 64-bit TSS (available) */
+             | (((limit >> 16) & 0xF) << 48)
+             | (((base >> 24) & 0xFF) << 56);
+    gdt[num + 1] = base >> 32;
 }
 
 void gdt_init(void) {
-    gp.limit = (sizeof(struct gdt_entry) * GDT_ENTRIES) - 1;
-    gp.base  = (uint32_t)&gdt;
+    memset(&tss, 0, sizeof(tss));
+    tss.iomap_base = sizeof(tss);
 
-    /* Entry 0: Null descriptor */
-    gdt_set_gate(0, 0, 0, 0, 0);
+    gdt[0] = 0;
+    gdt[1] = make_segment(0x9A, 0xA0);   /* kernel code: L=1, G=1 */
+    gdt[2] = make_segment(0x92, 0xC0);   /* kernel data */
+    gdt[3] = make_segment(0xFA, 0xA0);   /* user code, DPL3, L=1 */
+    gdt[4] = make_segment(0xF2, 0xC0);   /* user data, DPL3 */
+    write_tss_descriptor(5);
 
-    /* Entry 1: Kernel code segment — base=0, limit=4GB, exec/read, ring 0 */
-    gdt_set_gate(1, 0, 0xFFFFFFFF, 0x9A, 0xCF);
+    gp.limit = sizeof(gdt) - 1;
+    gp.base  = (uint64_t)(uintptr_t)&gdt;
 
-    /* Entry 2: Kernel data segment — base=0, limit=4GB, read/write, ring 0 */
-    gdt_set_gate(2, 0, 0xFFFFFFFF, 0x92, 0xCF);
-
-    /* Entry 3: User code segment — base=0, limit=4GB, exec/read, ring 3 */
-    gdt_set_gate(3, 0, 0xFFFFFFFF, 0xFA, 0xCF);
-
-    /* Entry 4: User data segment — base=0, limit=4GB, read/write, ring 3 */
-    gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xCF);
-
-    /* Entry 5: TSS */
-    write_tss(5, 0x10, 0);
-
-    gdt_flush((uint32_t)&gp);
+    gdt_flush((uint64_t)(uintptr_t)&gp);
     tss_flush();
 }
 
-void gdt_set_kernel_stack(uint32_t stack) {
-    tss.esp0 = stack;
+void gdt_set_kernel_stack(uint64_t rsp0) {
+    tss.rsp0 = rsp0;
 }

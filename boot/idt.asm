@@ -1,14 +1,14 @@
 ; boot/idt.asm — IDT load, ISR and IRQ stubs
 
 section .text
+bits 64
 global idt_flush
 extern isr_handler
 extern irq_handler
 
-; void idt_flush(uint32_t idt_ptr)
+; void idt_flush(uint64_t idt_ptr)
 idt_flush:
-    mov eax, [esp + 4]
-    lidt [eax]
+    lidt [rdi]
     ret
 
 ; ---------------------------------------------------------------
@@ -16,8 +16,8 @@ idt_flush:
 %macro ISR_NOERR 1
 global isr%1
 isr%1:
-    push dword 0           ; Push dummy error code
-    push dword %1          ; Push interrupt number
+    push qword 0           ; Push dummy error code
+    push qword %1          ; Push interrupt number
     jmp isr_common_stub
 %endmacro
 
@@ -25,7 +25,7 @@ isr%1:
 %macro ISR_ERR 1
 global isr%1
 isr%1:
-    push dword %1          ; Push interrupt number (error code already on stack)
+    push qword %1          ; Push interrupt number (error code already on stack)
     jmp isr_common_stub
 %endmacro
 
@@ -33,8 +33,8 @@ isr%1:
 %macro IRQ 2
 global irq%1
 irq%1:
-    push dword 0           ; Push dummy error code
-    push dword %2          ; Push interrupt number (32 + IRQ#)
+    push qword 0           ; Push dummy error code
+    push qword %2          ; Push interrupt number (32 + IRQ#)
     jmp irq_common_stub
 %endmacro
 
@@ -96,54 +96,58 @@ IRQ 15, 47
 ISR_NOERR 128
 
 ; ---------------------------------------------------------------
-; Common ISR stub — saves state, calls C handler, restores state
+%macro PUSH_ALL 0
+    push rax
+    push rbx
+    push rcx
+    push rdx
+    push rsi
+    push rdi
+    push rbp
+    push r8
+    push r9
+    push r10
+    push r11
+    push r12
+    push r13
+    push r14
+    push r15
+%endmacro
+
+%macro POP_ALL 0
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rbp
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    pop rax
+%endmacro
+
+; Stack at call: CPU frame (40) + err/int (16) + 15 GPRs (120) = 176 bytes = 16-aligned,
+; because the CPU aligns RSP to 16 before pushing the frame in long mode.
 isr_common_stub:
-    pusha                  ; Push edi, esi, ebp, esp, ebx, edx, ecx, eax
-    mov ax, ds
-    push eax               ; Save the data segment descriptor
-
-    mov ax, 0x10           ; Load the kernel data segment descriptor
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-
-    push esp               ; Push pointer to registers_t
+    PUSH_ALL
+    cld
+    mov rdi, rsp                    ; registers_t*
     call isr_handler
-    add esp, 4             ; Clean up pushed pointer
+    POP_ALL
+    add rsp, 16                     ; drop int_no + err_code
+    iretq
 
-    pop eax                ; Restore original data segment
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-
-    popa                   ; Pop edi, esi, ebp, esp, ebx, edx, ecx, eax
-    add esp, 8             ; Clean up error code and ISR number
-    iret                   ; Return from interrupt
-
-; Common IRQ stub
 irq_common_stub:
-    pusha
-    mov ax, ds
-    push eax
-
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-
-    push esp
+    PUSH_ALL
+    cld
+    mov rdi, rsp
     call irq_handler
-    add esp, 4
-
-    pop eax
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-
-    popa
-    add esp, 8
-    iret
+    POP_ALL
+    add rsp, 16
+    iretq

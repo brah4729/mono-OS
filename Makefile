@@ -8,13 +8,17 @@ AS      = nasm
 LD      = $(CROSS_PREFIX)ld
 
 # Flags
-CFLAGS  = -std=gnu99 -ffreestanding -O2 -Wall -Wextra -Werror            -I include -nostdlib -nostdinc -fno-builtin -fno-stack-protector            -nostartfiles -nodefaultlibs            -m64 -mcmodel=small -mno-red-zone -mgeneral-regs-only -fno-pic -fno-pie
+CFLAGS  = -std=gnu99 -ffreestanding -O2 -Wall -Wextra -Werror \
+           -I include -nostdlib -nostdinc -fno-builtin -fno-stack-protector \
+           -nostartfiles -nodefaultlibs \
+           -m64 -mcmodel=small -mno-red-zone -mgeneral-regs-only -fno-pic -fno-pie
 ASFLAGS = -f elf64
 LDFLAGS = -T linker.ld -nostdlib -z max-page-size=0x1000
 
 # Source files
-ASM_SOURCES = boot/multiboot.asm
-C_SOURCES   = kernel/kernel.c drivers/vga.c drivers/serial.c lib/string.c
+ASM_SOURCES = boot/multiboot.asm boot/gdt.asm boot/idt.asm
+C_SOURCES   = kernel/kernel.c kernel/selftest.c kernel/gdt.c kernel/idt.c kernel/pic.c kernel/pit.c \
+              drivers/vga.c drivers/serial.c lib/string.c
 
 # Object files
 ASM_OBJECTS = $(ASM_SOURCES:.asm=.o)
@@ -43,7 +47,8 @@ QEMU_DISK = -drive file=$(DISKIMG),format=raw,if=ide
 QEMU_BIN     = qemu-system-x86_64
 BOOT_TIMEOUT = 20
 # Serial-log strings that must appear for `make test-boot` to pass.
-BOOT_MARKERS = "[DORI] Multiboot2 verified" "[DORI] long mode active"
+BOOT_MARKERS = "[DORI] Multiboot2 verified" "[DORI] long mode active" \
+               "[TEST] utoa64 ok" "[TEST] gdt-selectors ok" "[TEST] idt-int3 ok" "[TEST] pit-ticks ok"
 
 # ─── Targets ───────────────────────────────────────────────
 
