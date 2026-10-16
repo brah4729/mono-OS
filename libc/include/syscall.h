@@ -4,11 +4,11 @@
 /*
  * monolibc — internal syscall interface
  *
- * Register convention (Linux i386 style):
- *   eax = syscall number
- *   ebx = arg1, ecx = arg2, edx = arg3
- *   esi = arg4, edi = arg5
- *   eax = return value
+ * Register convention (Linux x86_64 registers, entered via int 0x80):
+ *   rax = syscall number
+ *   rdi = arg1, rsi = arg2, rdx = arg3
+ *   r10 = arg4, r8  = arg5
+ *   rax = return value (negative = error)
  */
 
 /* Syscall numbers — must match kernel/include/syscall.h */
@@ -34,47 +34,27 @@
 
 /* Inline syscall wrappers using int 0x80 */
 
-static inline int _syscall0(int num) {
-    int ret;
-    __asm__ volatile (
-        "int $0x80"
-        : "=a"(ret)
-        : "a"(num)
-        : "memory"
-    );
+static inline long _syscall0(long num) {
+    long ret;
+    __asm__ volatile ("int $0x80" : "=a"(ret) : "a"(num) : "memory");
     return ret;
 }
 
-static inline int _syscall1(int num, int arg1) {
-    int ret;
-    __asm__ volatile (
-        "int $0x80"
-        : "=a"(ret)
-        : "a"(num), "b"(arg1)
-        : "memory"
-    );
+static inline long _syscall1(long num, long a1) {
+    long ret;
+    __asm__ volatile ("int $0x80" : "=a"(ret) : "a"(num), "D"(a1) : "memory");
     return ret;
 }
 
-static inline int _syscall2(int num, int arg1, int arg2) {
-    int ret;
-    __asm__ volatile (
-        "int $0x80"
-        : "=a"(ret)
-        : "a"(num), "b"(arg1), "c"(arg2)
-        : "memory"
-    );
+static inline long _syscall2(long num, long a1, long a2) {
+    long ret;
+    __asm__ volatile ("int $0x80" : "=a"(ret) : "a"(num), "D"(a1), "S"(a2) : "memory");
     return ret;
 }
 
-static inline int _syscall3(int num, int arg1, int arg2, int arg3) {
-    int ret;
-    __asm__ volatile (
-        "int $0x80"
-        : "=a"(ret)
-        : "a"(num), "b"(arg1), "c"(arg2), "d"(arg3)
-        : "memory"
-    );
+static inline long _syscall3(long num, long a1, long a2, long a3) {
+    long ret;
+    __asm__ volatile ("int $0x80" : "=a"(ret) : "a"(num), "D"(a1), "S"(a2), "d"(a3) : "memory");
     return ret;
 }
 

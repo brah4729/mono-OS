@@ -58,15 +58,15 @@ BOOT_MARKERS = "[DORI] Multiboot2 verified" "[DORI] long mode active" \
                "[TEST] vmm-high-map ok" "[TEST] vmm-huge-split ok" "[TEST] heap-align ok" \
                "[DORI] PS/2 mouse initialized" "[FB] Framebuffer found" \
                "[TEST] ctx-switch ok" "[TEST] ctx-stack-align ok" "[OK] Process manager" \
-               "[TEST] syscall-getpid ok" "[TEST] syscall-invalid ok" "[TEST] elf64-validate ok" "[OK] DoriFS mounted" \
+               "[TEST] syscall-getpid ok" "[TEST] syscall-invalid ok" "[TEST] elf64-validate ok" "[OK] DoriFS mounted" "[TEST] dorifs-dirents ok" \
                "[DORI] All systems initialized" "[OKI] Entering desktop event loop"
 
 # ─── Targets ───────────────────────────────────────────────
 
-.PHONY: all kernel clean run run-nodisk run-kernel debug iso disk libc userland test-boot test-no64
+.PHONY: all kernel clean run run-nodisk run-kernel debug iso disk libc userland test-boot test-no64 test-userland
 
 # Full build (kernel + libc + userland)
-all: $(ISO)
+all: libc userland $(ISO)
 
 # ── Kernel-only fast build (skips libc/userland) ──────────
 # Use this while iterating on oki.c / framebuffer / drivers.
@@ -88,11 +88,19 @@ $(KERNEL): $(OBJECTS)
 
 # Build monolibc (userspace C library)
 libc:
-	@$(MAKE) -C libc all
+	@$(MAKE) -C libc all CROSS_PREFIX=$(CROSS_PREFIX)
 
 # Build userland programs
 userland: libc
-	@$(MAKE) -C userland all
+	@$(MAKE) -C userland all CROSS_PREFIX=$(CROSS_PREFIX)
+
+# Every userland binary must be an x86_64 ELF64 executable
+test-userland: userland
+	@fail=0; for p in userland/hello userland/init userland/nix-env userland/nix-query; do \
+	    if $(CROSS_PREFIX)readelf -h $$p | grep -q "Machine:.*X86-64" && \
+	       $(CROSS_PREFIX)readelf -h $$p | grep -q "Class:.*ELF64" && \
+	       $(CROSS_PREFIX)readelf -h $$p | grep -q "Type:.*EXEC"; then echo "PASS: $$p"; \
+	    else echo "FAIL: $$p"; fail=1; fi; done; exit $$fail
 
 # Assembly compilation
 %.o: %.asm

@@ -34,15 +34,15 @@ typedef struct {
 
 /* Read a mono_dirent from a directory via syscall */
 static int read_dirent(const char* path, unsigned int index, mono_dirent_t* de) {
-    /* SYS_READDIR = 7 */
-    int ret;
+    /* SYS_READDIR = 7; x86_64 convention: rax = nr, rdi/rsi/rdx = args */
+    long ret;
     __asm__ volatile (
         "int $0x80"
         : "=a"(ret)
-        : "a"(7), "b"((int)path), "c"(index), "d"((int)de)
+        : "a"(7L), "D"(path), "S"((long)index), "d"(de)
         : "memory"
     );
-    return ret;
+    return (int)ret;
 }
 
 /* Parse a Nix store path: /nix/store/<hash>-<name> */

@@ -1,14 +1,15 @@
 # libc/Makefile — Build monolibc as a static library (libc.a)
 
-CROSS_PREFIX = $(HOME)/opt/cross/bin/i686-elf-
+CROSS_PREFIX ?= $(HOME)/opt/cross/bin/x86_64-elf-
 CC      = $(CROSS_PREFIX)gcc
 AR      = $(CROSS_PREFIX)ar
 AS      = nasm
 
 CFLAGS  = -std=gnu99 -ffreestanding -O2 -Wall -Wextra \
           -I include -nostdlib -nostdinc -fno-builtin \
-          -fno-stack-protector -nostartfiles -nodefaultlibs
-ASFLAGS = -f elf32
+          -fno-stack-protector -nostartfiles -nodefaultlibs \
+          -m64 -mno-red-zone -mgeneral-regs-only -fno-pic -fno-pie
+ASFLAGS = -f elf64
 
 # Source files
 C_SOURCES = string.c stdio.c stdlib.c unistd.c

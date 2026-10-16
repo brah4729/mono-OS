@@ -1,13 +1,14 @@
 # userland/Makefile — Build MonoOS userland programs
 
-CROSS_PREFIX = $(HOME)/opt/cross/bin/i686-elf-
+CROSS_PREFIX ?= $(HOME)/opt/cross/bin/x86_64-elf-
 CC      = $(CROSS_PREFIX)gcc
 LD      = $(CROSS_PREFIX)ld
 
 CFLAGS  = -std=gnu99 -ffreestanding -O2 -Wall -Wextra \
           -I ../libc/include -nostdlib -nostdinc -fno-builtin \
-          -fno-stack-protector -nostartfiles -nodefaultlibs
-LDFLAGS = -T ../libc/user.ld -nostdlib
+          -fno-stack-protector -nostartfiles -nodefaultlibs \
+          -m64 -mno-red-zone -mgeneral-regs-only -fno-pic -fno-pie
+LDFLAGS = -T ../libc/user.ld -nostdlib -z max-page-size=0x1000
 
 # Library paths
 CRT0    = ../libc/crt0.o

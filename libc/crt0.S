@@ -1,34 +1,21 @@
-; libc/crt0.S — C runtime startup for MonoOS userland programs
-;
-; This is the entry point for every userland executable.
-; The kernel's ELF loader jumps here. We set up the stack,
-; call main(), then invoke sys_exit() with main's return value.
+; libc/crt0.S — C runtime startup for MonoOS userland programs (x86_64)
 
-[BITS 32]
+[BITS 64]
 [GLOBAL _start]
 [EXTERN main]
 
 section .text
 
 _start:
-    ; The kernel has already set up our stack pointer.
-    ; Clear the base pointer for clean stack traces
-    xor ebp, ebp
-
-    ; Call main()
-    ; TODO: pass argc, argv when we have command-line argument support
-    push 0          ; argv = NULL
-    push 0          ; argc = 0
+    xor rbp, rbp            ; clean stack traces
+    and rsp, -16            ; SysV: 16-byte aligned before call
+    xor edi, edi            ; argc = 0
+    xor esi, esi            ; argv = NULL
     call main
-    add esp, 8      ; Clean up argc/argv
 
-    ; main() returned — call exit(return_value)
-    ; eax holds main's return value
-    mov ebx, eax    ; arg1 = exit code
-    mov eax, 0      ; SYS_EXIT = 0
-    int 0x80        ; syscall
+    mov edi, eax            ; exit code
+    xor eax, eax            ; SYS_EXIT = 0
+    int 0x80
 
-    ; Should never reach here
 .hang:
-    hlt
-    jmp .hang
+    jmp .hang               ; hlt would #GP once userland runs in ring 3
