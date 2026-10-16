@@ -11,6 +11,7 @@
 #include "../include/pmm.h"
 #include "../include/vmm.h"
 #include "../include/heap.h"
+#include "../include/process.h"
 
 _Static_assert(sizeof(registers_t) == 22 * 8, "registers_t must match boot/idt.asm push order");
 _Static_assert(sizeof(struct idt_entry) == 16, "x86_64 IDT gate is 16 bytes");
@@ -130,4 +131,34 @@ void selftest_memory(void) {
     test_vmm_high();
     test_vmm_split();
     test_heap();
+}
+
+/* ─── Context switch round trip + new-thread stack alignment ─ */
+
+static uint64_t main_rsp, co_rsp;
+static volatile int co_ran = 0;
+static volatile int co_aligned = 0;
+
+__attribute__((noinline)) static void co_entry(void) {
+    co_aligned = (((uintptr_t)__builtin_frame_address(0)) & 0xF) == 0;
+    co_ran = 1;
+    context_switch(&co_rsp, main_rsp);
+}
+
+void selftest_sched(void) {
+    const size_t size = 8192;
+    uint8_t* stack = kmalloc(size);
+    if (!stack) { selftest_report("ctx-switch", false); return; }
+
+    uint64_t* sp = (uint64_t*)(((uintptr_t)stack + size) & ~(uintptr_t)0xF);
+    *(--sp) = 0;                          /* fake return address → entry sees rsp ≡ 8 (mod 16) */
+    *(--sp) = (uint64_t)(uintptr_t)co_entry;
+    for (int i = 0; i < 6; i++) *(--sp) = 0;   /* rbp rbx r12 r13 r14 r15 */
+    co_rsp = (uint64_t)(uintptr_t)sp;
+
+    context_switch(&main_rsp, co_rsp);
+
+    selftest_report("ctx-switch", co_ran == 1);
+    selftest_report("ctx-stack-align", co_aligned == 1);
+    kfree(stack);
 }

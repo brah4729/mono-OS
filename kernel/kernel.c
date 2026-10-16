@@ -19,6 +19,7 @@
 #include "../include/mouse.h"
 #include "../include/ata.h"
 #include "../include/framebuffer.h"
+#include "../include/process.h"
 
 #define MULTIBOOT2_MAGIC_CHECK 0x36D76289
 
@@ -206,6 +207,10 @@ void kernel_main(uint32_t magic, uint64_t mboot_info_addr) {
     }
 
     fb_init_from_multiboot(mboot_info_addr);
+
+    process_init();
+    serial_puts("  [OK] Process manager\n");
+    selftest_sched();
 
     /* Subsystem init is re-added task by task during the x86_64 port. */
     for (;;) hlt();

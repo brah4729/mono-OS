@@ -90,13 +90,11 @@ int process_create(const char* name, void (*entry)(void), bool is_user) {
     strncpy(proc->name, name, 63);
 
     /* Allocate kernel stack */
-    proc->kernel_stack = (uint32_t)kmalloc(KERNEL_STACK_SIZE);
+    proc->kernel_stack = (uint64_t)(uintptr_t)kmalloc(KERNEL_STACK_SIZE);
     if (!proc->kernel_stack) {
         proc->state = PROCESS_STATE_FREE;
         return -1;
     }
-
-    uint32_t stack_top = proc->kernel_stack + KERNEL_STACK_SIZE;
 
     if (is_user) {
         /* Set up a stack frame that iret will pop into user mode */
@@ -106,23 +104,20 @@ int process_create(const char* name, void (*entry)(void), bool is_user) {
     }
 
     /*
-     * Set up initial stack frame for context_switch:
-     *   - Push entry point (eip for ret)
-     *   - Push initial register values (ebp, ebx, esi, edi)
+     * Initial stack frame for context_switch (top down): fake return
+     * address, entry (ret target), then the six callee-saved registers.
      */
-    uint32_t* sp = (uint32_t*)stack_top;
-    *(--sp) = (uint32_t)entry;   /* Return address (eip) */
-    *(--sp) = 0;                  /* ebp */
-    *(--sp) = 0;                  /* ebx */
-    *(--sp) = 0;                  /* esi */
-    *(--sp) = 0;                  /* edi */
+    uint64_t* sp = (uint64_t*)(uintptr_t)((proc->kernel_stack + KERNEL_STACK_SIZE) & ~0xFUL);
+    *(--sp) = 0;                               /* fake return addr: keeps SysV alignment at entry */
+    *(--sp) = (uint64_t)(uintptr_t)entry;      /* ret target */
+    for (int i = 0; i < 6; i++) *(--sp) = 0;   /* rbp rbx r12 r13 r14 r15 */
 
-    proc->esp = (uint32_t)sp;
-    proc->ebp = 0;
-    proc->eip = (uint32_t)entry;
+    proc->rsp = (uint64_t)(uintptr_t)sp;
+    proc->rbp = 0;
+    proc->rip = (uint64_t)(uintptr_t)entry;
 
     serial_puts("[PROCESS] Created PID ");
-    char buf[16];
+    char buf[24];
     utoa(proc->pid, buf, 10);
     serial_puts(buf);
     serial_puts(": ");
@@ -147,7 +142,7 @@ void process_exit(int32_t code) {
     current->exit_code = code;
 
     serial_puts("[PROCESS] PID ");
-    char buf[16];
+    char buf[24];
     utoa(current->pid, buf, 10);
     serial_puts(buf);
     serial_puts(" exited with code ");
@@ -157,7 +152,7 @@ void process_exit(int32_t code) {
 
     /* Free kernel stack */
     if (current->kernel_stack) {
-        kfree((void*)current->kernel_stack);
+        kfree((void*)(uintptr_t)current->kernel_stack);
         current->kernel_stack = 0;
     }
 
@@ -190,7 +185,7 @@ void process_yield(void) {
     current_pid = next->pid;
 
     if (current) {
-        context_switch(&current->esp, next->esp);
+        context_switch(&current->rsp, next->rsp);
     }
 
     (void)old_pid;

@@ -8,7 +8,7 @@
 #define MAX_PROCESSES       64
 #define KERNEL_STACK_SIZE   8192   /* 8 KiB per kernel stack */
 #define USER_STACK_SIZE     16384  /* 16 KiB per user stack */
-#define USER_STACK_TOP      0xBFFFF000
+#define USER_STACK_TOP      0x00007FFFFFFFF000UL
 
 /* Process states */
 typedef enum {
@@ -23,13 +23,13 @@ typedef enum {
 typedef struct {
     uint32_t            pid;
     process_state_t     state;
-    uint32_t            esp;            /* Saved stack pointer */
-    uint32_t            ebp;            /* Saved base pointer */
-    uint32_t            eip;            /* Saved instruction pointer */
-    page_directory_t*   page_dir;       /* Process address space */
-    uint32_t            kernel_stack;   /* Top of kernel stack */
-    uint32_t            user_stack;     /* Top of user stack */
-    uint32_t            brk;            /* Program break (heap end) */
+    uint64_t            rsp;            /* Saved stack pointer */
+    uint64_t            rbp;
+    uint64_t            rip;
+    page_table_t*       pml4;           /* Process address space (unused: shared kernel map) */
+    uint64_t            kernel_stack;   /* Base of kernel stack allocation */
+    uint64_t            user_stack;
+    uint64_t            brk;
     int32_t             exit_code;
     uint32_t            parent_pid;
     char                name[64];
@@ -48,6 +48,6 @@ void        process_unblock(uint32_t pid);
 int         process_wait(uint32_t pid);
 
 /* Context switch — defined in boot/context_switch.asm */
-extern void context_switch(uint32_t* old_esp, uint32_t new_esp);
+extern void context_switch(uint64_t* old_rsp, uint64_t new_rsp);
 
 #endif

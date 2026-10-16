@@ -16,9 +16,9 @@ ASFLAGS = -f elf64
 LDFLAGS = -T linker.ld -nostdlib -z max-page-size=0x1000
 
 # Source files
-ASM_SOURCES = boot/multiboot.asm boot/gdt.asm boot/idt.asm
+ASM_SOURCES = boot/multiboot.asm boot/gdt.asm boot/idt.asm boot/context_switch.asm
 C_SOURCES   = kernel/kernel.c kernel/selftest.c kernel/gdt.c kernel/idt.c kernel/pic.c kernel/pit.c \
-              kernel/pmm.c kernel/vmm.c kernel/heap.c \
+              kernel/pmm.c kernel/vmm.c kernel/heap.c kernel/process.c \
               drivers/vga.c drivers/serial.c drivers/keyboard.c drivers/mouse.c \
               drivers/ata.c drivers/framebuffer.c lib/string.c
 
@@ -52,7 +52,8 @@ BOOT_TIMEOUT = 20
 BOOT_MARKERS = "[DORI] Multiboot2 verified" "[DORI] long mode active" \
                "[TEST] utoa64 ok" "[TEST] gdt-selectors ok" "[TEST] idt-int3 ok" "[TEST] pit-ticks ok" \
                "[TEST] vmm-high-map ok" "[TEST] vmm-huge-split ok" "[TEST] heap-align ok" \
-               "[DORI] PS/2 mouse initialized" "[FB] Framebuffer found"
+               "[DORI] PS/2 mouse initialized" "[FB] Framebuffer found" \
+               "[TEST] ctx-switch ok" "[TEST] ctx-stack-align ok" "[OK] Process manager"
 
 # ─── Targets ───────────────────────────────────────────────
 
