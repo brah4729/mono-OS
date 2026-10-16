@@ -11,6 +11,9 @@
 #include "../include/pic.h"
 #include "../include/pit.h"
 #include "../include/selftest.h"
+#include "../include/pmm.h"
+#include "../include/vmm.h"
+#include "../include/heap.h"
 
 #define MULTIBOOT2_MAGIC_CHECK 0x36D76289
 
@@ -79,6 +82,29 @@ static void print_banner(void) {
     vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
 }
 
+/* ─── Memory init ────────────────────────────────────── */
+
+static void init_memory(uint32_t mem_upper) {
+    uint64_t mem_size = ((uint64_t)mem_upper + 1024) * 1024;
+
+    uint32_t* bitmap = (uint32_t*)_kernel_end;
+    pmm_init(mem_size, bitmap);
+
+    uint64_t bitmap_size = pmm_get_block_count() / 8;
+    uint64_t free_start = ((uintptr_t)_kernel_end + bitmap_size + PAGE_SIZE - 1) & ~(uint64_t)(PAGE_SIZE - 1);
+    if (mem_size > free_start) {
+        pmm_init_region(free_start, mem_size - free_start);
+    }
+    /* Heap lives at a fixed window; never hand those frames out */
+    pmm_deinit_region(HEAP_START, HEAP_INITIAL_SIZE);
+
+    vga_puts("  Memory: ");
+    vga_put_dec(pmm_get_free_block_count() * 4);
+    vga_puts(" KiB free / ");
+    vga_put_dec(pmm_get_block_count() * 4);
+    vga_puts(" KiB total\n");
+}
+
 /* ─── Kernel panic ───────────────────────────────────── */
 
 void kernel_panic(const char* msg) {
@@ -117,7 +143,11 @@ void kernel_main(uint32_t magic, uint64_t mboot_info_addr) {
     idt_init();
     serial_puts("[DORI] IDT + PIC initialized\n");
     pit_init(1000);
+    init_memory(mb2_mem_upper);
+    vmm_init();
+    heap_init();
     sti();
+    selftest_memory();
     selftest_cpu();
 
     /* Subsystem init is re-added task by task during the x86_64 port. */

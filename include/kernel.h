@@ -33,7 +33,7 @@ typedef struct {
 void kernel_panic(const char* msg);
 
 /* Symbols from linker script */
-extern uint32_t _kernel_start;
-extern uint32_t _kernel_end;
+extern uint8_t _kernel_start[];
+extern uint8_t _kernel_end[];
 
 #endif

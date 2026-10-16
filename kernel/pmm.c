@@ -38,8 +38,8 @@ static int bitmap_first_free(void) {
     return -1;
 }
 
-void pmm_init(uint32_t mem_size, uint32_t* bitmap_addr) {
-    pmm_max_blocks  = mem_size / PAGE_SIZE;
+void pmm_init(uint64_t mem_size, uint32_t* bitmap_addr) {
+    pmm_max_blocks  = (uint32_t)(mem_size / PAGE_SIZE);
     pmm_used_blocks = pmm_max_blocks;
     pmm_bitmap      = bitmap_addr;
 
@@ -47,7 +47,7 @@ void pmm_init(uint32_t mem_size, uint32_t* bitmap_addr) {
     memset(pmm_bitmap, 0xFF, pmm_max_blocks / 8);
 
     serial_puts("[PMM] Initialized: ");
-    char buf[16];
+    char buf[24];
     utoa(pmm_max_blocks, buf, 10);
     serial_puts(buf);
     serial_puts(" blocks (");
@@ -56,9 +56,9 @@ void pmm_init(uint32_t mem_size, uint32_t* bitmap_addr) {
     serial_puts(" KiB)\n");
 }
 
-void pmm_init_region(uint32_t base, uint32_t size) {
-    uint32_t align  = base / PAGE_SIZE;
-    uint32_t blocks = size / PAGE_SIZE;
+void pmm_init_region(uint64_t base, uint64_t size) {
+    uint32_t align  = (uint32_t)(base / PAGE_SIZE);
+    uint32_t blocks = (uint32_t)(size / PAGE_SIZE);
 
     for (; blocks > 0; blocks--) {
         bitmap_clear(align++);
@@ -69,9 +69,9 @@ void pmm_init_region(uint32_t base, uint32_t size) {
     bitmap_set(0);
 }
 
-void pmm_deinit_region(uint32_t base, uint32_t size) {
-    uint32_t align  = base / PAGE_SIZE;
-    uint32_t blocks = size / PAGE_SIZE;
+void pmm_deinit_region(uint64_t base, uint64_t size) {
+    uint32_t align  = (uint32_t)(base / PAGE_SIZE);
+    uint32_t blocks = (uint32_t)(size / PAGE_SIZE);
 
     for (; blocks > 0; blocks--) {
         bitmap_set(align++);
@@ -79,7 +79,7 @@ void pmm_deinit_region(uint32_t base, uint32_t size) {
     }
 }
 
-uint32_t pmm_alloc_frame(void) {
+uint64_t pmm_alloc_frame(void) {
     if (pmm_get_free_block_count() == 0) {
         return 0; /* Out of memory */
     }
@@ -92,11 +92,11 @@ uint32_t pmm_alloc_frame(void) {
     bitmap_set(frame);
     pmm_used_blocks++;
 
-    return (uint32_t)(frame * PAGE_SIZE);
+    return (uint64_t)frame * PAGE_SIZE;
 }
 
-void pmm_free_frame(uint32_t frame_addr) {
-    uint32_t frame = frame_addr / PAGE_SIZE;
+void pmm_free_frame(uint64_t frame_addr) {
+    uint32_t frame = (uint32_t)(frame_addr / PAGE_SIZE);
     bitmap_clear(frame);
     pmm_used_blocks--;
 }

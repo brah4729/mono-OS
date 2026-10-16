@@ -1,4 +1,4 @@
-/* kernel/vmm.c — Virtual Memory Manager (paging) */
+/* kernel/vmm.c — Virtual Memory Manager (x86_64 4-level paging) */
 
 #include "../include/vmm.h"
 #include "../include/pmm.h"
@@ -7,98 +7,126 @@
 #include "../include/vga.h"
 #include "../include/serial.h"
 #include "../include/io.h"
+#include "../include/kernel.h"
 
-static page_directory_t* current_directory = 0;
+/*
+ * The boot trampoline identity-maps 0–4 GiB with 2 MiB pages. We keep using
+ * that PML4; page tables we allocate come from the PMM (< 256 MiB, so they
+ * are reachable through the identity map).
+ */
+static page_table_t* pml4 = 0;
 
-/* Page fault handler */
+#define IDX(virt, shift) (((virt) >> (shift)) & 0x1FF)
+
 static void page_fault_handler(registers_t* regs) {
-    uint32_t faulting_address;
-    __asm__ volatile ("mov %%cr2, %0" : "=r"(faulting_address));
-
-    int present  = !(regs->err_code & 0x1);
-    int rw       = regs->err_code & 0x2;
-    int us       = regs->err_code & 0x4;
+    uint64_t addr;
+    __asm__ volatile ("mov %%cr2, %0" : "=r"(addr));
 
     vga_set_color(VGA_WHITE, VGA_RED);
-    vga_puts("\n*** PAGE FAULT ***\n");
-    if (present) vga_puts("  Page not present\n");
-    if (rw)      vga_puts("  Write operation\n");
-    if (us)      vga_puts("  User mode\n");
-    vga_puts("  Address: 0x");
-    vga_put_hex(faulting_address);
+    vga_puts("\n*** PAGE FAULT ***\n  Address: ");
+    vga_put_hex(addr);
     vga_puts("\n");
 
-    serial_puts("[PAGE FAULT] addr=0x");
-    serial_put_hex(faulting_address);
+    serial_puts("[PAGE FAULT] addr=");
+    serial_put_hex(addr);
+    serial_puts(" rip=");
+    serial_put_hex(regs->rip);
+    serial_puts(" err=");
+    serial_put_hex(regs->err_code);
     serial_puts("\n");
 
     cli();
     for (;;) hlt();
 }
 
-void vmm_map_page(uint32_t phys, uint32_t virt, uint32_t flags) {
-    uint32_t pd_index = virt >> 22;
-    uint32_t pt_index = (virt >> 12) & 0x3FF;
-
-    /* Get or create page table */
-    if (!(current_directory->entries[pd_index] & PAGE_PRESENT)) {
-        uint32_t pt_phys = pmm_alloc_frame();
-        current_directory->entries[pd_index] = pt_phys | PAGE_PRESENT | PAGE_WRITABLE | flags;
-        page_table_t* pt = (page_table_t*)(pt_phys);
-        memset(pt, 0, sizeof(page_table_t));
-    }
-
-    page_table_t* table = (page_table_t*)(current_directory->entries[pd_index] & 0xFFFFF000);
-    table->entries[pt_index] = (phys & 0xFFFFF000) | PAGE_PRESENT | flags;
+static inline void flush_tlb_all(void) {
+    uint64_t cr3;
+    __asm__ volatile ("mov %%cr3, %0" : "=r"(cr3));
+    __asm__ volatile ("mov %0, %%cr3" : : "r"(cr3) : "memory");
 }
 
-void vmm_unmap_page(uint32_t virt) {
-    uint32_t pd_index = virt >> 22;
-    uint32_t pt_index = (virt >> 12) & 0x3FF;
+static page_table_t* alloc_table(void) {
+    uint64_t phys = pmm_alloc_frame();
+    if (!phys) kernel_panic("[VMM] out of frames for page tables");
+    memset((void*)(uintptr_t)phys, 0, PAGE_SIZE);
+    return (page_table_t*)(uintptr_t)phys;
+}
 
-    if (!(current_directory->entries[pd_index] & PAGE_PRESENT)) {
-        return;
+/* Return the next-level table for *entry, creating it or splitting a 2 MiB page. */
+static page_table_t* next_level(pte_t* entry, uint64_t flags) {
+    uint64_t user = flags & PAGE_USER;
+
+    if (!(*entry & PAGE_PRESENT)) {
+        page_table_t* t = alloc_table();
+        *entry = (uint64_t)(uintptr_t)t | PAGE_PRESENT | PAGE_WRITABLE | user;
+        return t;
     }
 
-    page_table_t* table = (page_table_t*)(current_directory->entries[pd_index] & 0xFFFFF000);
-    table->entries[pt_index] = 0;
+    if (*entry & PAGE_HUGE) {
+        uint64_t base = *entry & PAGE_ADDR_MASK & ~0x1FFFFFUL;
+        uint64_t keep = *entry & (PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+        page_table_t* t = alloc_table();
+        for (uint64_t i = 0; i < 512; i++) {
+            t->entries[i] = (base + i * PAGE_SIZE) | keep;
+        }
+        *entry = (uint64_t)(uintptr_t)t | PAGE_PRESENT | PAGE_WRITABLE | user;
+        flush_tlb_all();
+        return t;
+    }
 
-    /* Invalidate TLB entry */
+    *entry |= user;
+    return (page_table_t*)(uintptr_t)(*entry & PAGE_ADDR_MASK);
+}
+
+void vmm_map_page(uint64_t phys, uint64_t virt, uint64_t flags) {
+    page_table_t* pdpt = next_level(&pml4->entries[IDX(virt, 39)], flags);
+    page_table_t* pd   = next_level(&pdpt->entries[IDX(virt, 30)], flags);
+    page_table_t* pt   = next_level(&pd->entries[IDX(virt, 21)], flags);
+    pt->entries[IDX(virt, 12)] = (phys & PAGE_ADDR_MASK) | PAGE_PRESENT | flags;
     __asm__ volatile ("invlpg (%0)" : : "r"(virt) : "memory");
 }
 
-uint32_t vmm_get_physical(uint32_t virt) {
-    uint32_t pd_index = virt >> 22;
-    uint32_t pt_index = (virt >> 12) & 0x3FF;
+/* Walk without creating; returns the PTE pointer or 0. A huge PD entry returns 0. */
+static pte_t* find_pte(uint64_t virt, uint64_t* huge_base) {
+    *huge_base = 0;
+    pte_t e = pml4->entries[IDX(virt, 39)];
+    if (!(e & PAGE_PRESENT)) return 0;
+    page_table_t* pdpt = (page_table_t*)(uintptr_t)(e & PAGE_ADDR_MASK);
 
-    if (!(current_directory->entries[pd_index] & PAGE_PRESENT)) {
+    e = pdpt->entries[IDX(virt, 30)];
+    if (!(e & PAGE_PRESENT)) return 0;
+    page_table_t* pd = (page_table_t*)(uintptr_t)(e & PAGE_ADDR_MASK);
+
+    e = pd->entries[IDX(virt, 21)];
+    if (!(e & PAGE_PRESENT)) return 0;
+    if (e & PAGE_HUGE) {
+        *huge_base = (e & PAGE_ADDR_MASK & ~0x1FFFFFUL) | 1;   /* low bit = "is huge" */
         return 0;
     }
-
-    page_table_t* table = (page_table_t*)(current_directory->entries[pd_index] & 0xFFFFF000);
-    return table->entries[pt_index] & 0xFFFFF000;
+    page_table_t* pt = (page_table_t*)(uintptr_t)(e & PAGE_ADDR_MASK);
+    return &pt->entries[IDX(virt, 12)];
 }
 
-void vmm_switch_directory(page_directory_t* dir) {
-    current_directory = dir;
-    __asm__ volatile ("mov %0, %%cr3" : : "r"((uint32_t)dir));
+void vmm_unmap_page(uint64_t virt) {
+    uint64_t huge;
+    pte_t* pte = find_pte(virt, &huge);
+    if (!pte) return;                     /* unmapped, or inside a boot huge page: leave it */
+    *pte = 0;
+    __asm__ volatile ("invlpg (%0)" : : "r"(virt) : "memory");
+}
+
+uint64_t vmm_get_physical(uint64_t virt) {
+    uint64_t huge;
+    pte_t* pte = find_pte(virt, &huge);
+    if (huge) return (huge & ~1UL) + (virt & 0x1FF000UL);
+    if (!pte || !(*pte & PAGE_PRESENT)) return 0;
+    return *pte & PAGE_ADDR_MASK;
 }
 
 void vmm_init(void) {
-    uint32_t pd_phys = pmm_alloc_frame();
-    current_directory = (page_directory_t*)pd_phys;
-    memset(current_directory, 0, sizeof(page_directory_t));
-    for (uint32_t i = 0; i < 0x1000000; i += PAGE_SIZE) {
-        vmm_map_page(i, i, PAGE_WRITABLE);
-    }
-    for (uint32_t i= 0; i < 0x400000; i += PAGE_SIZE){
-        vmm_map_page(0xfd000000 + i, 0xfd000000 + i, PAGE_WRITABLE);
-    }
+    uint64_t cr3;
+    __asm__ volatile ("mov %%cr3, %0" : "=r"(cr3));
+    pml4 = (page_table_t*)(uintptr_t)(cr3 & PAGE_ADDR_MASK);
     isr_register_handler(14, page_fault_handler);
-    vmm_switch_directory(current_directory);
-    uint32_t cr0;
-    __asm__ volatile ("mov %%cr0, %0" : "=r"(cr0));
-    cr0 |= 0x80000000;
-    __asm__ volatile ("mov %0, %%cr0" : : "r"(cr0));
-    serial_puts("[VMM] Paging enabled, first 16 MiB identity-mapped + FB mapped\n");
+    serial_puts("[VMM] 4-level paging, boot identity map 0-4 GiB adopted\n");
 }

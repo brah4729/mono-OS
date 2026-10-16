@@ -8,6 +8,9 @@
 #include "../include/gdt.h"
 #include "../include/pit.h"
 #include "../include/io.h"
+#include "../include/pmm.h"
+#include "../include/vmm.h"
+#include "../include/heap.h"
 
 _Static_assert(sizeof(registers_t) == 22 * 8, "registers_t must match boot/idt.asm push order");
 _Static_assert(sizeof(struct idt_entry) == 16, "x86_64 IDT gate is 16 bytes");
@@ -72,4 +75,59 @@ void selftest_cpu(void) {
     test_segments();
     test_int3();
     test_pit();
+}
+
+/* ─── Memory: VMM above 4 GiB, huge-page split, heap ────── */
+
+static void test_vmm_high(void) {
+    const uint64_t virt = 0x0000400000000000UL;   /* far outside the boot identity map */
+    uint64_t frame = pmm_alloc_frame();
+    if (!frame) { selftest_report("vmm-high-map", false); return; }
+
+    vmm_map_page(frame, virt, PAGE_WRITABLE);
+    *(volatile uint64_t*)virt = 0xDEADBEEFCAFEBABEUL;
+    bool ok = *(volatile uint64_t*)(uintptr_t)frame == 0xDEADBEEFCAFEBABEUL
+           && vmm_get_physical(virt) == frame;
+    vmm_unmap_page(virt);
+    ok = ok && vmm_get_physical(virt) == 0;
+    pmm_free_frame(frame);
+    selftest_report("vmm-high-map", ok);
+}
+
+/* Review Focus #3: remapping inside a boot 2 MiB page must keep its neighbours identity-mapped */
+static void test_vmm_split(void) {
+    const uint64_t virt = 0x400000UL;             /* ELF load address, inside boot PD entry 2 */
+    const uint64_t neighbour = 0x5FF000UL;        /* same 2 MiB page, different 4 KiB page */
+    uint64_t frame = pmm_alloc_frame();
+    if (!frame) { selftest_report("vmm-huge-split", false); return; }
+
+    vmm_map_page(frame, virt, PAGE_WRITABLE);
+    *(volatile uint32_t*)virt = 0x12345678;
+    bool ok = *(volatile uint32_t*)(uintptr_t)frame == 0x12345678
+           && vmm_get_physical(neighbour) == neighbour;
+    vmm_map_page(virt, virt, PAGE_WRITABLE);      /* restore identity */
+    pmm_free_frame(frame);
+    selftest_report("vmm-huge-split", ok);
+}
+
+static void test_heap(void) {
+    void* a = kmalloc(24);
+    void* b = kmalloc(3 * 1024 * 1024);           /* backbuffer-sized */
+    void* c = kmalloc(1);
+    bool ok = a && b && c
+           && ((uintptr_t)a & 0xF) == 0
+           && ((uintptr_t)b & 0xF) == 0
+           && ((uintptr_t)c & 0xF) == 0;
+    if (b) memset(b, 0xAB, 3 * 1024 * 1024);      /* must not fault or corrupt c */
+    kfree(a); kfree(b); kfree(c);
+    void* d = kmalloc(24);
+    ok = ok && d != 0;
+    kfree(d);
+    selftest_report("heap-align", ok);
+}
+
+void selftest_memory(void) {
+    test_vmm_high();
+    test_vmm_split();
+    test_heap();
 }

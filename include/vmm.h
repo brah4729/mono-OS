@@ -3,27 +3,21 @@
 
 #include "types.h"
 
-#define PAGES_PER_TABLE   1024
-#define PAGES_PER_DIR     1024
-#define PAGE_PRESENT      0x1
-#define PAGE_WRITABLE     0x2
-#define PAGE_USER         0x4
+#define PAGE_PRESENT    0x1UL
+#define PAGE_WRITABLE   0x2UL
+#define PAGE_USER       0x4UL
+#define PAGE_HUGE       0x80UL
+#define PAGE_ADDR_MASK  0x000FFFFFFFFFF000UL
 
-typedef uint32_t pt_entry;
-typedef uint32_t pd_entry;
-
-typedef struct {
-    pt_entry entries[PAGES_PER_TABLE];
-} page_table_t;
+typedef uint64_t pte_t;
 
 typedef struct {
-    pd_entry entries[PAGES_PER_DIR];
-} page_directory_t;
+    pte_t entries[512];
+} __attribute__((aligned(4096))) page_table_t;
 
-void vmm_init(void);
-void vmm_map_page(uint32_t phys, uint32_t virt, uint32_t flags);
-void vmm_unmap_page(uint32_t virt);
-uint32_t vmm_get_physical(uint32_t virt);
-void vmm_switch_directory(page_directory_t* dir);
+void     vmm_init(void);
+void     vmm_map_page(uint64_t phys, uint64_t virt, uint64_t flags);
+void     vmm_unmap_page(uint64_t virt);
+uint64_t vmm_get_physical(uint64_t virt);
 
 #endif
