@@ -60,7 +60,7 @@ extern uint32_t* backbuffer;
 extern const uint8_t font_8x16[95][16];
 
 /* Framebuffer API */
-void        fb_init_from_multiboot(uint32_t mb_info_addr);
+void        fb_init_from_multiboot(uint64_t mb_info_addr);
 bool        fb_is_available(void);
 framebuffer_info_t fb_get_info(void);
 

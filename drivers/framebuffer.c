@@ -178,7 +178,7 @@ typedef struct {
     uint16_t reserved;
 } __attribute__((packed)) mb2_tag_framebuffer_t;
 
-void fb_init_from_multiboot(uint32_t mb_info_addr) {
+void fb_init_from_multiboot(uint64_t mb_info_addr) {
     memset(&fb_info, 0, sizeof(fb_info));
     fb_info.available = false;
 
@@ -188,11 +188,11 @@ void fb_init_from_multiboot(uint32_t mb_info_addr) {
     }
 
     /* Multiboot2 info structure: first 8 bytes are total_size + reserved */
-    uint32_t total_size = *(uint32_t*)mb_info_addr;
+    uint32_t total_size = *(uint32_t*)(uintptr_t)mb_info_addr;
     (void)total_size;
 
     /* Tags start at offset 8 */
-    uint8_t* tag_ptr = (uint8_t*)(mb_info_addr + 8);
+    uint8_t* tag_ptr = (uint8_t*)(uintptr_t)(mb_info_addr + 8);
 
     while (1) {
         mb2_tag_t* tag = (mb2_tag_t*)tag_ptr;
@@ -202,7 +202,7 @@ void fb_init_from_multiboot(uint32_t mb_info_addr) {
         if (tag->type == MB2_TAG_FRAMEBUFFER) {
             mb2_tag_framebuffer_t* fb_tag = (mb2_tag_framebuffer_t*)tag;
 
-            fb_info.address = (uint32_t*)(uint32_t)fb_tag->framebuffer_addr;
+            fb_info.address = (uint32_t*)(uintptr_t)fb_tag->framebuffer_addr;
             fb_info.width   = fb_tag->framebuffer_width;
             fb_info.height  = fb_tag->framebuffer_height;
             fb_info.pitch   = fb_tag->framebuffer_pitch;
@@ -210,7 +210,7 @@ void fb_init_from_multiboot(uint32_t mb_info_addr) {
             fb_info.available = true;
 
             serial_puts("[FB] Framebuffer found: ");
-            char buf[16];
+            char buf[24];
             utoa(fb_info.width, buf, 10);
             serial_puts(buf);
             serial_puts("x");
@@ -220,7 +220,7 @@ void fb_init_from_multiboot(uint32_t mb_info_addr) {
             utoa(fb_info.bpp, buf, 10);
             serial_puts(buf);
             serial_puts(" @ 0x");
-            utoa((uint32_t)fb_info.address, buf, 16);
+            utoa((uintptr_t)fb_info.address, buf, 16);
             serial_puts(buf);
             serial_puts(" pitch=");
             utoa(fb_info.pitch, buf, 10);
@@ -228,9 +228,9 @@ void fb_init_from_multiboot(uint32_t mb_info_addr) {
             serial_puts("\n");
 
             /* Identity-map framebuffer memory */
-            uint32_t fb_size = fb_info.pitch * fb_info.height;
-            uint32_t fb_start = (uint32_t)fb_info.address;
-            for (uint32_t addr = fb_start; addr < fb_start + fb_size; addr += 4096) {
+            uint64_t fb_size = (uint64_t)fb_info.pitch * fb_info.height;
+            uint64_t fb_start = (uintptr_t)fb_info.address;
+            for (uint64_t addr = fb_start; addr < fb_start + fb_size; addr += 4096) {
                 vmm_map_page(addr, addr, PAGE_PRESENT | PAGE_WRITABLE);
             }
 

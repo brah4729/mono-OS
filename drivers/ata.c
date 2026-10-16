@@ -117,7 +117,7 @@ void ata_init(void) {
     serial_puts("[ATA] Drive detected: ");
     serial_puts(primary_drive.model);
     serial_puts(" (");
-    char buf[16];
+    char buf[24];
     utoa(primary_drive.size_mb, buf, 10);
     serial_puts(buf);
     serial_puts(" MB)\n");
